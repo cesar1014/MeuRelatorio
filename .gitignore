@@ -1,0 +1,9 @@
+node_modules/
+*.log
+dist/
+exports/
+.env
+.env.*
+!.env.example
+.vercel/
+tmp-*.xlsx

@@ -1,0 +1,175 @@
+[
+  {
+    "sessionId": "48a19f04-8bd8-408f-9abc-27461e346dd4",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771883560341,
+    "createdAt": 1771840360341
+  },
+  {
+    "sessionId": "84aa15a9-a37b-48f1-96d5-50eec82cf7b6",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771883590676,
+    "createdAt": 1771840390676
+  },
+  {
+    "sessionId": "12b37d44-2643-42c4-a955-0224628a6b1d",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771884149102,
+    "createdAt": 1771840949102
+  },
+  {
+    "sessionId": "1798b499-8d5e-416a-af4e-d59bff8940ac",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771884648480,
+    "createdAt": 1771841448480
+  },
+  {
+    "sessionId": "a735c23c-0140-43e5-819c-835013aa6fce",
+    "username": "FELLOW",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON",
+      "FELLOW"
+    ],
+    "activeProjectCode": "FELLOW",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771884651421,
+    "createdAt": 1771841451421
+  },
+  {
+    "sessionId": "02de5a9a-5342-4eae-b987-77ab5ceff215",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771884686087,
+    "createdAt": 1771841486087
+  },
+  {
+    "sessionId": "c27f719d-4da8-4106-a754-727787bce4f7",
+    "username": "Cesar1014",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON",
+      "FELLOW"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771889372944,
+    "createdAt": 1771846172944
+  },
+  {
+    "sessionId": "5703ea5f-7ee0-47f2-9a72-5906caf1d9a9",
+    "username": "Cesar1014",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON",
+      "FELLOW"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771890331751,
+    "createdAt": 1771847131751
+  },
+  {
+    "sessionId": "5ec83bf0-2ac7-4d87-80f4-da6716b4c060",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771898877744,
+    "createdAt": 1771855677744
+  },
+  {
+    "sessionId": "cff3a915-728f-4ab4-a45a-44171a723720",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771898890165,
+    "createdAt": 1771855690165
+  },
+  {
+    "sessionId": "7080a6f1-07a7-4dea-9d24-6fb3efa94b08",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771898914226,
+    "createdAt": 1771855714226
+  },
+  {
+    "sessionId": "196765f8-80f9-4da5-b706-bd6d09859d42",
+    "username": "FELLOW",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON",
+      "FELLOW"
+    ],
+    "activeProjectCode": "FELLOW",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771899597129,
+    "createdAt": 1771856397129
+  },
+  {
+    "sessionId": "84d8faaa-00e4-43c8-a577-db6d8aadcec6",
+    "username": "FELLOW",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON",
+      "FELLOW"
+    ],
+    "activeProjectCode": "FELLOW",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771899619089,
+    "createdAt": 1771856419089
+  },
+  {
+    "sessionId": "89b3da75-bc16-4fab-ad9a-8208bfccc385",
+    "username": "PEOCON",
+    "role": "admin",
+    "allowedProjects": [
+      "PEOCON"
+    ],
+    "activeProjectCode": "PEOCON",
+    "requiresProjectSelection": false,
+    "expiresAt": 1771918968364,
+    "createdAt": 1771875768364
+  }
+]

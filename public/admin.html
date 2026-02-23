@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administracao | Gestao Orcamentaria</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .admin-layout {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 22px 36px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
+      padding: 18px 20px;
+    }
+
+    .admin-header h1 {
+      font-family: var(--font-display);
+      font-size: 1.7rem;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    .admin-section-desc {
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      margin: 6px 0 0;
+    }
+
+    .admin-back-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.88rem;
+    }
+
+    .admin-header-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .admin-main-menu {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .admin-main-menu-link,
+    .admin-main-menu .admin-tab {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .admin-main-menu-link:hover,
+    .admin-main-menu .admin-tab:hover {
+      color: var(--text-main);
+      border-color: var(--border);
+      background: color-mix(in srgb, var(--bg-body) 65%, var(--bg-surface));
+    }
+
+    .admin-main-menu .admin-tab.active {
+      color: var(--primary);
+      border-color: color-mix(in srgb, var(--primary) 44%, var(--border));
+      background: color-mix(in srgb, var(--primary-light) 72%, var(--bg-surface));
+    }
+
+    .admin-panel {
+      display: none;
+    }
+
+    .admin-panel.active {
+      display: grid;
+      gap: 14px;
+    }
+
+    .admin-filter-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-surface);
+      padding: 10px 12px;
+    }
+
+    .admin-filter-bar label {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      font-weight: 700;
+    }
+
+    .admin-filter-bar select {
+      min-width: 180px;
+      padding: 8px 10px;
+      font-size: 0.88rem;
+    }
+
+    .admin-table-wrap {
+      overflow-x: auto;
+    }
+
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .admin-table th,
+    .admin-table td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .admin-table th {
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: var(--bg-body);
+      position: sticky;
+      top: 0;
+    }
+
+    .admin-empty {
+      color: var(--text-secondary);
+      padding: 20px;
+      text-align: center;
+      font-style: italic;
+    }
+
+    .badge {
+      display: inline-flex;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .badge-active {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .badge-inactive {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .badge-completed {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+
+    .badge-super-admin {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .badge-dept {
+      background: var(--neutral-bg);
+      color: var(--neutral);
+    }
+
+    .admin-stat-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+
+    .admin-stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .admin-stat-card .stat-label {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .admin-stat-card .stat-value {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      color: var(--primary);
+    }
+
+    .admin-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.56);
+      display: none;
+      place-items: center;
+      z-index: 1000;
+    }
+
+    .admin-modal-overlay.open {
+      display: grid;
+    }
+
+    .admin-modal {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow-md);
+      width: min(640px, 92vw);
+      max-height: 86vh;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .admin-modal h3 {
+      font-family: var(--font-display);
+      margin: 0 0 16px;
+      font-size: 1.2rem;
+    }
+
+    .admin-form-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .admin-form-grid label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      font-weight: 700;
+    }
+
+    .admin-form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .admin-form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .admin-memberships {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-body);
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .admin-membership-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .admin-membership-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .admin-danger-btn {
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1px solid transparent;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .admin-danger-btn:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .admin-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: 12px;
+      background: var(--bg-sidebar);
+      color: var(--text-sidebar);
+      font-weight: 700;
+      box-shadow: var(--shadow-md);
+      transform: translateY(70px);
+      opacity: 0;
+      transition: all 0.24s ease;
+      z-index: 9999;
+    }
+
+    .admin-toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .admin-inline-note {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 900px) {
+      .admin-layout {
+        padding: 16px 12px 24px;
+      }
+
+      .admin-form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="admin-layout">
+    <div class="admin-header">
+      <div>
+        <a href="/" class="admin-back-link">Voltar ao sistema</a>
+        <h1>Painel de Administracao</h1>
+        <p class="admin-section-desc" id="admin-welcome"></p>
+      </div>
+      <div class="admin-header-actions">
+        <button id="btn-edit-profile" class="ghost btn btn-ghost" type="button">Alterar perfil</button>
+        <button id="btn-refresh" class="ghost btn btn-ghost" type="button">Atualizar</button>
+      </div>
+    </div>
+
+    <nav class="admin-main-menu" aria-label="Menu da administracao">
+      <a class="admin-main-menu-link" href="/hub">Home</a>
+      <button class="admin-tab active" data-panel="projects" type="button">Projetos</button>
+      <button class="admin-tab" data-panel="users" type="button">Usuarios</button>
+      <button class="admin-tab" data-panel="reports" type="button">Relatorio</button>
+    </nav>
+
+    <div id="panel-projects" class="admin-panel active">
+      <div class="admin-filter-bar">
+        <label>
+          Filtrar por departamento:
+          <select id="filter-project-dept">
+            <option value="">Todos</option>
+          </select>
+        </label>
+        <button id="btn-add-project" class="primary btn btn-primary" type="button">+ Novo projeto</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head card-header">
+          <h3 id="projects-title">Projetos</h3>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Codigo</th>
+                <th>Nome</th>
+                <th>Departamento</th>
+                <th>Status</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody id="projects-body"></tbody>
+          </table>
+        </div>
+        <div id="projects-empty" class="admin-empty" hidden>Nenhum projeto encontrado.</div>
+      </div>
+    </div>
+
+    <div id="panel-users" class="admin-panel">
+      <div class="admin-filter-bar">
+        <label>
+          Filtrar por projeto:
+          <select id="filter-user-project">
+            <option value="">Todos</option>
+          </select>
+        </label>
+        <button id="btn-add-user" class="primary btn btn-primary" type="button">+ Novo usuario</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head card-header">
+          <h3>Usuarios</h3>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Tipo</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Super Admin</th>
+                <th>Projetos</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+        <div id="users-empty" class="admin-empty" hidden>Nenhum usuario encontrado.</div>
+      </div>
+    </div>
+
+    <div id="panel-reports" class="admin-panel">
+      <div id="stat-cards" class="admin-stat-cards"></div>
+
+      <div class="card">
+        <div class="card-head card-header">
+          <h3>Departamentos</h3>
+        </div>
+        <p class="admin-inline-note" id="departments-info"></p>
+        <div class="admin-form-row" style="margin: 12px 0">
+          <label>
+            Nome do departamento
+            <input id="dept-name" type="text" maxlength="120" placeholder="Ex: Engenharia" />
+          </label>
+          <label>
+            Ramal
+            <input id="dept-phone" type="text" maxlength="20" placeholder="Ex: 1234" />
+          </label>
+        </div>
+        <div class="admin-form-actions" style="margin-top: 0; padding-top: 0; border-top: none">
+          <button id="dept-cancel" class="ghost btn btn-ghost" type="button" hidden>Cancelar edicao</button>
+          <button id="dept-save" class="primary btn btn-primary" type="button">Salvar departamento</button>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Ramal</th>
+                <th>Projetos</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody id="departments-body"></tbody>
+          </table>
+        </div>
+        <div id="departments-empty" class="admin-empty" hidden>Nenhum departamento cadastrado.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head card-header">
+          <h3>Resumo por projeto</h3>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Projeto</th>
+                <th>Nome</th>
+                <th>Departamento</th>
+                <th>Status</th>
+                <th>Usuarios com acesso</th>
+              </tr>
+            </thead>
+            <tbody id="reports-projects-body"></tbody>
+          </table>
+        </div>
+        <div id="reports-empty" class="admin-empty" hidden>Nenhum dado de relatorio disponivel.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="project-modal-overlay" class="admin-modal-overlay">
+    <div class="admin-modal">
+      <h3 id="project-modal-title">Novo Projeto</h3>
+      <div class="admin-form-grid">
+        <label>
+          Codigo (gerado automaticamente pelo nome)
+          <input type="text" id="pmodal-code" maxlength="64" readonly />
+        </label>
+        <label>
+          Nome
+          <input type="text" id="pmodal-name" maxlength="120" />
+        </label>
+        <div class="admin-form-row">
+          <label>
+            Departamento
+            <select id="pmodal-dept">
+              <option value="">Sem departamento</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select id="pmodal-status">
+              <option value="ativo">Ativo</option>
+              <option value="inativo">Inativo</option>
+              <option value="concluido">Concluido</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="admin-form-actions">
+        <button id="pmodal-cancel" class="ghost btn btn-ghost" type="button">Cancelar</button>
+        <button id="pmodal-save" class="primary btn btn-primary" type="button">Salvar projeto</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="user-modal-overlay" class="admin-modal-overlay">
+    <div class="admin-modal">
+      <h3 id="user-modal-title">Novo Usuario</h3>
+      <div class="admin-form-grid">
+        <label>
+          Username
+          <input type="text" id="modal-username" maxlength="120" />
+        </label>
+        <div class="admin-form-row">
+          <label>
+            Tipo de conta
+            <select id="modal-account-type">
+              <option value="user">Usuario</option>
+              <option value="project">Projeto</option>
+            </select>
+          </label>
+          <label>
+            Role global
+            <select id="modal-role">
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+        </div>
+        <div class="admin-form-row">
+          <label>
+            Projeto padrao
+            <select id="modal-default-project">
+              <option value="">-</option>
+            </select>
+          </label>
+          <label>
+            Nova senha (deixe em branco para manter)
+            <input type="text" id="modal-password" autocomplete="off" />
+          </label>
+        </div>
+        <div class="admin-form-row">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="modal-is-active" />
+            Ativo
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="modal-is-super-admin" />
+            Super Admin
+          </label>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <label style="margin:0">Acesso por projeto (marque e defina o role)</label>
+            <button id="modal-clear-memberships" class="ghost btn btn-ghost" type="button">Remover acessos</button>
+          </div>
+          <p class="admin-inline-note">Conta de projeto aceita somente 1 projeto marcado.</p>
+          <div id="modal-memberships" class="admin-memberships"></div>
+        </div>
+      </div>
+      <div class="admin-form-actions">
+        <button id="modal-cancel" class="ghost btn btn-ghost" type="button">Cancelar</button>
+        <button id="modal-save" class="primary btn btn-primary" type="button">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="profile-modal-overlay" class="admin-modal-overlay">
+    <div class="admin-modal" style="width:min(520px,92vw)">
+      <h3>Alterar perfil</h3>
+      <div class="admin-form-grid">
+        <label>
+          Novo username
+          <input type="text" id="profile-username" maxlength="120" autocomplete="username" />
+        </label>
+        <label>
+          Nova senha
+          <input type="password" id="profile-password" autocomplete="new-password" />
+        </label>
+        <label>
+          Confirmar senha
+          <input type="password" id="profile-password-confirm" autocomplete="new-password" />
+        </label>
+      </div>
+      <div class="admin-form-actions">
+        <button id="profile-cancel" class="ghost btn btn-ghost" type="button">Cancelar</button>
+        <button id="profile-save" class="primary btn btn-primary" type="button">Salvar perfil</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="admin-toast" class="admin-toast"></div>
+
+  <script src="./encoding-guard.js"></script>
+  <script src="./admin.js" type="module"></script>
+</body>
+
+</html>

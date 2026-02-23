@@ -1,0 +1,35 @@
+{
+  "name": "site-relatorio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "dev:ui": "vite build --watch --mode development",
+    "build:ui": "vite build",
+    "build": "npm run build:ui && node -e \"console.log('Build concluido')\"",
+    "auth:hash": "node scripts/generate-password-hash.js",
+    "supa:bootstrap-project": "node scripts/bootstrap-supabase-project.js",
+    "supa:cleanup-suspicious:check": "node scripts/cleanup-suspicious-lancamentos.js",
+    "supa:cleanup-suspicious": "node scripts/cleanup-suspicious-lancamentos.js --apply",
+    "admin:make-super": "node scripts/make-super-admin.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "lucide-react": "^0.543.0",
+    "pdfkit": "^0.17.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "uuid": "^13.0.0",
+    "xlsx-populate": "^1.21.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.2",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "vite": "^7.1.5"
+  }
+}
