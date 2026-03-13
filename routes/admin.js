@@ -422,10 +422,11 @@ export function registerAdminRoutes(app, deps) {
         });
         if (!normalized) { res.status(400).json({ error: "Dados de usuario invalidos." }); return; }
 
+        const usernameChanged = normalizeLoginIdentifier(current.username) !== normalizeLoginIdentifier(normalized.username);
         const before = sanitizeAuthUserForList(current);
         setAuthUsers(currentUsers.map((item) => (String(item?.id) === userId ? normalized : item)));
         await schedulePersistAuthUsers();
-        await synchronizeAuthSessionsForUser(normalized.username, { revoke: normalized.isActive === false || passwordProvided });
+        await synchronizeAuthSessionsForUser(usernameChanged ? current.username : normalized.username, { revoke: usernameChanged || normalized.isActive === false || passwordProvided });
         const updated = getAuthUserById(userId) ?? getAuthUserByUsername(normalized.username);
         await writeAuditLog(req, "admin.user.update", "auth_user", userId, before, sanitizeAuthUserForList(updated));
         res.json({ ok: true, user: sanitizeAuthUserForList(updated) });
