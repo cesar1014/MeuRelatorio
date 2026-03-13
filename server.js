@@ -24,14 +24,22 @@ import {
 } from "./api/reporting-core.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import {
+  createApiOriginGuardMiddleware,
+  createSecurityHeadersMiddleware,
+} from "./src/server/middleware/security.js";
+import { registerProjectRoutes } from "./src/server/routes/projects.js";
 import { createJsonStore } from "./storage/json-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
-const BUNDLE_DATA_DIR = path.join(__dirname, "data");
-const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/site-relatorio-data" : BUNDLE_DATA_DIR);
+const SOURCE_DATA_DIR = path.join(__dirname, "data");
+const SEEDS_DATA_DIR = path.join(SOURCE_DATA_DIR, "seeds");
+const BUNDLE_DATA_DIR = SOURCE_DATA_DIR;
+const DATA_DIR =
+  process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/site-relatorio-data" : SOURCE_DATA_DIR);
 const LEGACY_PROJECTS_DATA_DIR = path.join(DATA_DIR, "projects");
 const LEGACY_BUNDLE_PROJECTS_DATA_DIR = path.join(BUNDLE_DATA_DIR, "projects");
 const LEGACY_TOPICOS_FILE = path.join(DATA_DIR, "topicos.json");
@@ -53,7 +61,8 @@ const SUPABASE_AUDIT_LOG_TABLE = process.env.SUPABASE_AUDIT_LOG_TABLE || "audit_
 const SUPABASE_PROJECTS_TABLE = process.env.SUPABASE_PROJECTS_TABLE || "projects";
 const SUPABASE_DEPARTMENTS_TABLE = process.env.SUPABASE_DEPARTMENTS_TABLE || "departments";
 const SUPABASE_APP_USERS_TABLE = process.env.SUPABASE_APP_USERS_TABLE || "app_users";
-const SUPABASE_PROJECT_MEMBERSHIPS_TABLE = process.env.SUPABASE_PROJECT_MEMBERSHIPS_TABLE || "project_memberships";
+const SUPABASE_PROJECT_MEMBERSHIPS_TABLE =
+  process.env.SUPABASE_PROJECT_MEMBERSHIPS_TABLE || "project_memberships";
 const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const APP_PROJECT_CODE = normalizeProjectCode(process.env.APP_PROJECT_CODE ?? "PEOCON");
 const PROJECT_DEFINITIONS = {
@@ -91,7 +100,10 @@ const LEGACY_AUTH_USERNAME = String(process.env.APP_LOGIN_USER ?? "").trim();
 const LEGACY_AUTH_PASSWORD = String(process.env.APP_LOGIN_PASSWORD ?? "");
 const AUTH_COOKIE_NAME = "peocon_session";
 const AUTH_SESSION_TTL_MS = Math.max(60_000, Number(process.env.AUTH_SESSION_TTL_MS ?? 43_200_000));
-const AUTH_MAX_ACTIVE_SESSIONS = Math.max(100, Number(process.env.AUTH_MAX_ACTIVE_SESSIONS ?? 2000));
+const AUTH_MAX_ACTIVE_SESSIONS = Math.max(
+  100,
+  Number(process.env.AUTH_MAX_ACTIVE_SESSIONS ?? 2000)
+);
 const AUTH_TOKEN_SECRET = String(process.env.AUTH_TOKEN_SECRET ?? "").trim();
 const ALLOW_INSECURE_DEV_AUTH_SECRET = process.env.ALLOW_INSECURE_DEV_AUTH_SECRET === "true";
 const IS_PRODUCTION_ENV = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
@@ -149,6 +161,20 @@ const TOPIC_LABELS_PT = {
   "Project Coordinator": "Coordenador do Projeto",
   "Administrative Assistant 1": "Assistente Administrativo 1",
   "Administrative Assistant 2": "Assistente Administrativo 2",
+  "Medical resident grant": "Residencia medica",
+  "Nursing resident grant": "Residencia em enfermagem",
+  "Administrative assistant salary": "Assistente administrativo",
+  "Project coordinator salary": "Coordenador de projeto",
+  "Audiovisual salary": "Audiovisual",
+  "Nurse salary": "Enfermeiro",
+  "Operational fees (PG Lato Sensu/COREME)": "Custos operacionais (PG Lato Sensu/COREME)",
+  "Infrastructure and equipement": "Infraestrutura e equipamentos",
+  "Infrastructure and equipment": "Infraestrutura e equipamentos",
+  "Transportation/operational reserve - External internships":
+    "Transporte/reserva operacional - Estagios externos",
+  "Advertising fees (Marketing/press)": "Publicidade (Marketing/imprensa)",
+  "Scientific and cultural events fee (Harena)": "Eventos cientificos e culturais (Harena)",
+  "Resident support fee": "Apoio ao residente",
   Computer: "Computador",
   "Didactic Material": "Material Didatico",
   Publications: "Publicacoes",
@@ -281,6 +307,17 @@ function getLegacyProjectStoragePaths(projectCode = APP_PROJECT_CODE) {
   };
 }
 
+function getProjectSeedPaths(projectCode = APP_PROJECT_CODE) {
+  const normalized = normalizeProjectCode(projectCode, APP_PROJECT_CODE);
+  const seedDir = path.join(SEEDS_DATA_DIR, normalized);
+  return {
+    projectCode: normalized,
+    dataDir: seedDir,
+    topicosFile: path.join(seedDir, "topicos.json"),
+    appConfigFile: path.join(seedDir, "app-config.json"),
+  };
+}
+
 function getProjectStoragePaths(projectCode = APP_PROJECT_CODE) {
   const normalized = normalizeProjectCode(projectCode, APP_PROJECT_CODE);
   const dataDir = path.join(DATA_DIR, normalized);
@@ -295,13 +332,17 @@ function getProjectStoragePaths(projectCode = APP_PROJECT_CODE) {
     topicosBundleFile: path.join(bundleDir, "topicos.json"),
     lancamentosBundleFile: path.join(bundleDir, "lancamentos.json"),
     appConfigBundleFile: path.join(bundleDir, "app-config.json"),
+    seeds: getProjectSeedPaths(normalized),
     legacy: getLegacyProjectStoragePaths(normalized),
   };
 }
 
 function parseTrustProxySetting(rawValue) {
-  const normalized = String(rawValue ?? "").trim().toLowerCase();
-  if (!normalized || normalized === "0" || normalized === "false" || normalized === "off") return false;
+  const normalized = String(rawValue ?? "")
+    .trim()
+    .toLowerCase();
+  if (!normalized || normalized === "0" || normalized === "false" || normalized === "off")
+    return false;
   if (normalized === "true" || normalized === "on") return true;
 
   const numeric = Number(normalized);
@@ -312,14 +353,18 @@ function parseTrustProxySetting(rawValue) {
 }
 
 function normalizeAuthRole(roleValue, fallbackRole = AUTH_ROLE_ADMIN) {
-  const normalized = String(roleValue ?? "").trim().toLowerCase();
+  const normalized = String(roleValue ?? "")
+    .trim()
+    .toLowerCase();
   if (!normalized) return fallbackRole;
   if (AUTH_ALLOWED_ROLES.has(normalized)) return normalized;
   return fallbackRole;
 }
 
 function normalizeAccountType(value, fallback = AUTH_ACCOUNT_TYPE_USER) {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (AUTH_ALLOWED_ACCOUNT_TYPES.has(normalized)) return normalized;
   return fallback;
 }
@@ -334,10 +379,11 @@ function normalizeLoginIdentifier(value) {
 
 function normalizeProjectCodesList(value, fallbackList = []) {
   const sourceValues = Array.isArray(value) ? value : [value];
-  const merged = [...sourceValues, ...(Array.isArray(fallbackList) ? fallbackList : [fallbackList])];
-  const normalized = merged
-    .map((item) => normalizeProjectCode(item, ""))
-    .filter(Boolean);
+  const merged = [
+    ...sourceValues,
+    ...(Array.isArray(fallbackList) ? fallbackList : [fallbackList]),
+  ];
+  const normalized = merged.map((item) => normalizeProjectCode(item, "")).filter(Boolean);
   if (normalized.length === 0) return [];
   return [...new Set(normalized)];
 }
@@ -373,7 +419,9 @@ function normalizeProjectCategoriesInput(value, fallback = []) {
 const PROJECT_STATUS_VALUES = new Set(["ativo", "inativo", "concluido"]);
 
 function normalizeProjectStatus(value, fallback = "ativo") {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (PROJECT_STATUS_VALUES.has(normalized)) return normalized;
   return fallback;
 }
@@ -419,7 +467,10 @@ function normalizeAuthUserDefinition(rawUser = {}) {
   const normalizedUsername = normalizeAuthUsername(rawUser?.username);
   if (!normalizedUsername) return null;
 
-  let normalizedCredential = normalizeAuthCredential(rawUser?.password, rawUser?.passwordHash ?? rawUser?.hash);
+  let normalizedCredential = normalizeAuthCredential(
+    rawUser?.password,
+    rawUser?.passwordHash ?? rawUser?.hash
+  );
   if (!normalizedCredential) return null;
 
   let passwordMigratedToHash = false;
@@ -431,7 +482,9 @@ function normalizeAuthUserDefinition(rawUser = {}) {
   const rolesByProject = normalizeRolesByProject(rawUser?.rolesByProject);
   const allowedFromRoles = Object.keys(rolesByProject);
   const allowedProjects = normalizeProjectCodesList(
-    allowedFromRoles.length > 0 ? allowedFromRoles : (rawUser?.allowedProjects ?? rawUser?.projects),
+    allowedFromRoles.length > 0
+      ? allowedFromRoles
+      : (rawUser?.allowedProjects ?? rawUser?.projects),
     [resolveProjectCodeForUser(normalizedUsername, rawUser?.projectCode)]
   );
   const ensuredAllowedProjects = allowedProjects.length > 0 ? allowedProjects : [APP_PROJECT_CODE];
@@ -441,9 +494,12 @@ function normalizeAuthUserDefinition(rawUser = {}) {
   );
   const normalizedAccountType = normalizeAccountType(rawUser?.accountType, AUTH_ACCOUNT_TYPE_USER);
   const isSuperAdmin = rawUser?.isSuperAdmin === true;
-  const accountType = (!isSuperAdmin && normalizedAccountType === AUTH_ACCOUNT_TYPE_PROJECT && ensuredAllowedProjects.length === 1)
-    ? AUTH_ACCOUNT_TYPE_PROJECT
-    : AUTH_ACCOUNT_TYPE_USER;
+  const accountType =
+    !isSuperAdmin &&
+    normalizedAccountType === AUTH_ACCOUNT_TYPE_PROJECT &&
+    ensuredAllowedProjects.length === 1
+      ? AUTH_ACCOUNT_TYPE_PROJECT
+      : AUTH_ACCOUNT_TYPE_USER;
 
   const nowIso = new Date().toISOString();
   const createdAtRaw = Date.parse(String(rawUser?.createdAt ?? ""));
@@ -618,8 +674,8 @@ if (!AUTH_TOKEN_SECRET) {
 
 const supabase = SUPABASE_ENABLED
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
   : null;
 
 const app = express();
@@ -647,7 +703,9 @@ app.use(express.json({ limit: "256kb" }));
 function getAuthUserByUsername(username) {
   const normalizedLogin = normalizeLoginIdentifier(username);
   if (!normalizedLogin) return null;
-  return authUsers.find((item) => normalizeLoginIdentifier(item?.username) === normalizedLogin) ?? null;
+  return (
+    authUsers.find((item) => normalizeLoginIdentifier(item?.username) === normalizedLogin) ?? null
+  );
 }
 
 function getAuthUserById(userId) {
@@ -670,7 +728,10 @@ function getAllowedProjectsFromUser(user) {
 }
 
 function getAllowedProjectsFromSession(session) {
-  const sessionAllowed = normalizeProjectCodesList(session?.allowedProjects ?? session?.projects, []);
+  const sessionAllowed = normalizeProjectCodesList(
+    session?.allowedProjects ?? session?.projects,
+    []
+  );
   const user = getAuthUserByUsername(session?.username);
   const userAllowed = getAllowedProjectsFromUser(user);
   if (userAllowed.length > 0) {
@@ -683,7 +744,10 @@ function getAllowedProjectsFromSession(session) {
 
   if (sessionAllowed.length > 0) return sessionAllowed;
 
-  const explicitProject = normalizeProjectCode(session?.activeProjectCode ?? session?.projectCode, "");
+  const explicitProject = normalizeProjectCode(
+    session?.activeProjectCode ?? session?.projectCode,
+    ""
+  );
   if (explicitProject) return [explicitProject];
 
   return [];
@@ -701,7 +765,10 @@ function isProjectAllowedForSession(session, projectCode) {
 }
 
 function getProjectCodeFromSession(session) {
-  const explicitProject = normalizeProjectCode(session?.activeProjectCode ?? session?.projectCode, "");
+  const explicitProject = normalizeProjectCode(
+    session?.activeProjectCode ?? session?.projectCode,
+    ""
+  );
   if (explicitProject && isProjectAllowedForSession(session, explicitProject)) {
     return explicitProject;
   }
@@ -765,7 +832,7 @@ function serializeAuthUsers() {
 function schedulePersistAuthUsers() {
   const snapshot = serializeAuthUsers();
   authUsersPersistQueue = authUsersPersistQueue
-    .catch(() => { })
+    .catch(() => {})
     .then(async () => {
       await writeJson(AUTH_USERS_STORE_FILE, snapshot);
       await persistAuthUsersToSupabase(snapshot);
@@ -795,10 +862,6 @@ async function loadAuthUsersFromDisk() {
 function getActiveProjectCode() {
   const scoped = requestProjectContext.getStore()?.projectCode;
   return normalizeProjectCode(scoped, APP_PROJECT_CODE);
-}
-
-function getActiveProjectPaths() {
-  return getProjectStoragePaths(getActiveProjectCode());
 }
 
 function getProjectName(projectCode = getActiveProjectCode()) {
@@ -843,7 +906,9 @@ async function getProjectCatalog(projectCodes = []) {
   const fallbackList = buildFallbackProjectCatalog(normalizedCodes);
   const fallbackByCode = new Map(fallbackList.map((project) => [project.code, project]));
   if (!SUPABASE_ENABLED || !supabase) {
-    return fallbackList.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR"));
+    return fallbackList.sort((a, b) =>
+      String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR")
+    );
   }
 
   try {
@@ -875,7 +940,9 @@ async function getProjectCatalog(projectCodes = []) {
 
     if (error) {
       warnSupabaseOnce("projects catalog", error);
-      return fallbackList.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR"));
+      return fallbackList.sort((a, b) =>
+        String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR")
+      );
     }
 
     const rowsByCode = new Map();
@@ -885,11 +952,15 @@ async function getProjectCatalog(projectCodes = []) {
 
       const fallback = fallbackByCode.get(code);
       const department = String(row?.department ?? "").trim();
-      const status = normalizeProjectStatus(row?.status, row?.is_active === false ? "inativo" : "ativo");
+      const status = normalizeProjectStatus(
+        row?.status,
+        row?.is_active === false ? "inativo" : "ativo"
+      );
       rowsByCode.set(code, {
         code,
         name: String(row?.name ?? fallback?.name ?? code).trim() || code,
-        brandName: String(fallback?.brandName ?? "").trim() || String(row?.name ?? fallback?.name ?? code),
+        brandName:
+          String(fallback?.brandName ?? "").trim() || String(row?.name ?? fallback?.name ?? code),
         status,
         isActive: status === "ativo",
         department,
@@ -897,14 +968,19 @@ async function getProjectCatalog(projectCodes = []) {
     }
 
     const merged = normalizedCodes
-      .map((code) => rowsByCode.get(code) ?? fallbackByCode.get(code) ?? buildFallbackProjectCatalog([code])[0])
+      .map(
+        (code) =>
+          rowsByCode.get(code) ?? fallbackByCode.get(code) ?? buildFallbackProjectCatalog([code])[0]
+      )
       .filter(Boolean)
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR"));
 
     return merged;
   } catch (error) {
     warnSupabaseOnce("projects catalog error", error);
-    return fallbackList.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR"));
+    return fallbackList.sort((a, b) =>
+      String(a.name ?? "").localeCompare(String(b.name ?? ""), "pt-BR")
+    );
   }
 }
 
@@ -1083,7 +1159,7 @@ const ACTIVE_PROJECTS_CACHE_TTL_MS = 30_000;
 
 function listAllActiveProjectsCached() {
   const now = Date.now();
-  if (_activeProjectsCache && (now - _activeProjectsCacheTs) < ACTIVE_PROJECTS_CACHE_TTL_MS) {
+  if (_activeProjectsCache && now - _activeProjectsCacheTs < ACTIVE_PROJECTS_CACHE_TTL_MS) {
     return _activeProjectsCache;
   }
   // Synchronous fallback: use known project codes + in-memory overrides
@@ -1119,7 +1195,10 @@ async function listAllActiveProjects() {
 
     const codes = (data ?? [])
       .filter((row) => {
-        const status = normalizeProjectStatus(row?.status, row?.is_active === false ? "inativo" : "ativo");
+        const status = normalizeProjectStatus(
+          row?.status,
+          row?.is_active === false ? "inativo" : "ativo"
+        );
         return status !== "concluido";
       })
       .map((row) => String(row.code ?? "").trim())
@@ -1141,7 +1220,9 @@ function invalidateActiveProjectsCache() {
 }
 
 function normalizeRateUserKey(value) {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return normalized || "__anonymous__";
 }
 
@@ -1167,7 +1248,9 @@ function hasSpreadsheetFormulaPrefix(value) {
 }
 
 function sanitizeCsvCell(value) {
-  const text = String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const text = String(value ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
   if (/^[\s\t]*[=+\-@]/.test(text)) {
     return `'${text}`;
   }
@@ -1177,7 +1260,7 @@ function sanitizeCsvCell(value) {
 function csvEscape(value) {
   const text = sanitizeCsvCell(value);
   if (!/[",\n]/.test(text)) return text;
-  return `"${text.replace(/"/g, "\"\"")}"`;
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function isSupabaseSchemaError(error) {
@@ -1185,9 +1268,7 @@ function isSupabaseSchemaError(error) {
   const message = String(error?.message ?? "").toLowerCase();
   if (code === "42P01" || code === "42703") return true;
   return (
-    message.includes("does not exist") ||
-    message.includes("relation") ||
-    message.includes("column")
+    message.includes("does not exist") || message.includes("relation") || message.includes("column")
   );
 }
 
@@ -1224,7 +1305,10 @@ function getAuthSecretValue() {
 }
 
 function signAuthPayload(encodedPayload) {
-  return crypto.createHmac("sha256", getAuthSecretValue()).update(encodedPayload).digest("base64url");
+  return crypto
+    .createHmac("sha256", getAuthSecretValue())
+    .update(encodedPayload)
+    .digest("base64url");
 }
 
 function createAuthSessionToken(session) {
@@ -1261,7 +1345,9 @@ function normalizeAuthSessionRecord(record) {
     if (sessionAllowed.length === 0) {
       allowedProjects = userAllowed;
     } else {
-      const intersection = sessionAllowed.filter((projectCode) => userAllowed.includes(projectCode));
+      const intersection = sessionAllowed.filter((projectCode) =>
+        userAllowed.includes(projectCode)
+      );
       allowedProjects = intersection.length > 0 ? intersection : userAllowed;
     }
   }
@@ -1334,7 +1420,7 @@ function enforceAuthSessionLimit() {
 function schedulePersistAuthSessions() {
   const snapshot = serializeAuthSessions();
   authSessionPersistQueue = authSessionPersistQueue
-    .catch(() => { })
+    .catch(() => {})
     .then(async () => {
       await writeJson(AUTH_SESSION_STORE_FILE, snapshot);
       if (SUPABASE_ENABLED) {
@@ -1404,14 +1490,15 @@ function parseAuthSessionToken(token) {
 
   if (expiresAt <= Date.now()) {
     if (authSessions.delete(sessionId)) {
-      schedulePersistAuthSessions().catch(() => { });
+      schedulePersistAuthSessions().catch(() => {});
     }
     return null;
   }
 
   const storedSession = authSessions.get(sessionId);
   if (!storedSession) return null;
-  if (normalizeLoginIdentifier(storedSession.username) !== normalizeLoginIdentifier(username)) return null;
+  if (normalizeLoginIdentifier(storedSession.username) !== normalizeLoginIdentifier(username))
+    return null;
   if (storedSession.expiresAt !== expiresAt) return null;
   if (storedSession.expiresAt <= Date.now()) return null;
 
@@ -1536,7 +1623,10 @@ function isAuthenticatedRequest(req) {
 function setAuthCookie(req, res, token) {
   const maxAgeSeconds = Math.floor(AUTH_SESSION_TTL_MS / 1000);
   const parts = [...authCookieBaseParts(req), `Max-Age=${maxAgeSeconds}`];
-  res.setHeader("Set-Cookie", `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; ${parts.join("; ")}`);
+  res.setHeader(
+    "Set-Cookie",
+    `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; ${parts.join("; ")}`
+  );
 }
 
 function clearAuthCookie(req, res) {
@@ -1549,9 +1639,10 @@ async function createAuthSession(account) {
 
   const allowedCandidates = normalizeProjectCodesList(account?.allowedProjects, []);
   const accountType = normalizeAccountType(account?.accountType, AUTH_ACCOUNT_TYPE_USER);
-  const projectScopedLoginCode = account?.isSuperAdmin === true
-    ? ""
-    : getProjectScopedLoginProjectCode(account?.username, allowedCandidates);
+  const projectScopedLoginCode =
+    account?.isSuperAdmin === true
+      ? ""
+      : getProjectScopedLoginProjectCode(account?.username, allowedCandidates);
   const preferredProjectCode = normalizeProjectCode(
     pickDefaultProjectCode(
       allowedCandidates,
@@ -1562,7 +1653,9 @@ async function createAuthSession(account) {
 
   let allowedProjects = projectScopedLoginCode
     ? [projectScopedLoginCode]
-    : (allowedCandidates.length > 0 ? allowedCandidates : [APP_PROJECT_CODE]);
+    : allowedCandidates.length > 0
+      ? allowedCandidates
+      : [APP_PROJECT_CODE];
 
   if (accountType === AUTH_ACCOUNT_TYPE_PROJECT && account?.isSuperAdmin !== true) {
     allowedProjects = [preferredProjectCode || allowedProjects[0] || APP_PROJECT_CODE];
@@ -1611,7 +1704,10 @@ async function setActiveProjectForSession(sessionId, projectCode) {
 
   const user = getAuthUserByUsername(session?.username);
   const effectiveRole = user?.isSuperAdmin
-    ? normalizeAuthRole(user.rolesByProject?.[normalizedProjectCode] ?? AUTH_ROLE_ADMIN, AUTH_ROLE_ADMIN)
+    ? normalizeAuthRole(
+        user.rolesByProject?.[normalizedProjectCode] ?? AUTH_ROLE_ADMIN,
+        AUTH_ROLE_ADMIN
+      )
     : session.role;
 
   const updatedSession = {
@@ -1638,7 +1734,8 @@ function authenticateUser(username, password) {
 
   const account = authUsers.find(
     (candidate) =>
-      candidate?.isActive !== false && normalizeLoginIdentifier(candidate?.username) === normalizedLogin
+      candidate?.isActive !== false &&
+      normalizeLoginIdentifier(candidate?.username) === normalizedLogin
   );
   if (!account) return null;
 
@@ -1725,7 +1822,8 @@ async function synchronizeAuthSessionsForUser(username, { revoke = false } = {})
     const nextRole = normalizeAuthRole(user.role, AUTH_ROLE_VIEWER);
     const requiresProjectSelection = allowedProjects.length > 1 && !nextActiveProjectCode;
     const allowedUnchanged =
-      normalizeProjectCodesList(session?.allowedProjects, []).join(",") === allowedProjects.join(",");
+      normalizeProjectCodesList(session?.allowedProjects, []).join(",") ===
+      allowedProjects.join(",");
 
     if (
       allowedUnchanged &&
@@ -1822,7 +1920,9 @@ const GROUP_KEY_BY_FOLDED = new Map(
 );
 
 function normalizeTopicoGroupName(groupName, fallback = "COMMUNICATIONS & PUBLICATIONS") {
-  const text = String(groupName ?? "").trim().replace(/\s+/g, " ");
+  const text = String(groupName ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (!text) return fallback;
   return GROUP_KEY_BY_FOLDED.get(normalizeTextFold(text)) || text;
 }
@@ -1934,7 +2034,9 @@ function lancamentoFromSupabase(row) {
   const valor = toNumber(row.valor);
   const ano = Number(row.ano);
   const fallbackDate = String(row.data ?? "");
-  const fallback = isIsoDate(fallbackDate) ? getAnoSemestre(fallbackDate) : { ano: 0, semestre: "S1" };
+  const fallback = isIsoDate(fallbackDate)
+    ? getAnoSemestre(fallbackDate)
+    : { ano: 0, semestre: "S1" };
 
   return {
     id: String(row.id),
@@ -2040,7 +2142,9 @@ async function persistTopicosToSupabase(topicos, projectCode = getActiveProjectC
     }
   }
 
-  const existingIds = new Set((existingRows ?? []).map((row) => String(row.id ?? "").trim()).filter(Boolean));
+  const existingIds = new Set(
+    (existingRows ?? []).map((row) => String(row.id ?? "").trim()).filter(Boolean)
+  );
   const desiredIds = new Set(payload.map((row) => String(row.id)));
   const idsToDelete = [...existingIds].filter((id) => !desiredIds.has(id));
 
@@ -2151,12 +2255,16 @@ async function loadAuthUsersFromSupabase() {
   try {
     let { data: usersData, error: usersError } = await supabase
       .from(SUPABASE_APP_USERS_TABLE)
-      .select("id, username, password_hash, role, is_active, is_super_admin, account_type, default_project_code, created_at, updated_at, last_password_reset_at");
+      .select(
+        "id, username, password_hash, role, is_active, is_super_admin, account_type, default_project_code, created_at, updated_at, last_password_reset_at"
+      );
 
     if (usersError && isMissingAccountTypeColumnError(usersError)) {
       const legacy = await supabase
         .from(SUPABASE_APP_USERS_TABLE)
-        .select("id, username, password_hash, role, is_active, is_super_admin, default_project_code, created_at, updated_at, last_password_reset_at");
+        .select(
+          "id, username, password_hash, role, is_active, is_super_admin, default_project_code, created_at, updated_at, last_password_reset_at"
+        );
       usersData = legacy?.data;
       usersError = legacy?.error;
     }
@@ -2230,7 +2338,8 @@ async function persistAuthUsersToSupabase(snapshot) {
 
     if (upsertError && isMissingAccountTypeColumnError(upsertError)) {
       const legacyUsersPayload = usersPayload.map((row) => {
-        const { account_type: _accountType, ...legacy } = row;
+        const legacy = { ...row };
+        delete legacy.account_type;
         return legacy;
       });
       const legacy = await supabase
@@ -2331,7 +2440,10 @@ async function persistAuthSessionsToSupabase(snapshot) {
   let { error } = await supabase.from(SUPABASE_AUTH_SESSIONS_TABLE).insert(payload);
   if (error && isSupabaseSchemaError(error)) {
     const legacyPayload = payload.map((row) => {
-      const { allowed_projects, active_project_code, requires_project_selection, ...legacyRow } = row;
+      const legacyRow = { ...row };
+      delete legacyRow.allowed_projects;
+      delete legacyRow.active_project_code;
+      delete legacyRow.requires_project_selection;
       return legacyRow;
     });
     ({ error } = await supabase.from(SUPABASE_AUTH_SESSIONS_TABLE).insert(legacyPayload));
@@ -2347,7 +2459,14 @@ async function persistAuthSessionsToSupabase(snapshot) {
   return true;
 }
 
-async function writeAuditLog(req, action, entityType, entityId, beforeData = null, afterData = null) {
+async function writeAuditLog(
+  req,
+  action,
+  entityType,
+  entityId,
+  beforeData = null,
+  afterData = null
+) {
   if (!SUPABASE_ENABLED) return;
   const session = getAuthSessionFromRequest(req);
   const projectCode = getProjectCodeFromSession(session) || APP_PROJECT_CODE;
@@ -2421,12 +2540,14 @@ async function migrateLegacyProjectStorage(projectCode) {
 async function ensureProjectStorage(projectCode) {
   const normalizedProjectCode = normalizeProjectCode(projectCode, APP_PROJECT_CODE);
   const paths = getProjectStoragePaths(normalizedProjectCode);
+  const seeds = paths.seeds;
   const legacy = paths.legacy;
   await fsp.mkdir(paths.dataDir, { recursive: true });
   await migrateLegacyProjectStorage(normalizedProjectCode);
 
   if (!fs.existsSync(paths.topicosFile)) {
     const copied = await copyFirstAvailableFileIfMissing(paths.topicosFile, [
+      seeds?.topicosFile,
       paths.topicosBundleFile,
       legacy?.topicosBundleFile,
     ]);
@@ -2451,6 +2572,7 @@ async function ensureProjectStorage(projectCode) {
 
   if (!fs.existsSync(paths.appConfigFile)) {
     const copied = await copyFirstAvailableFileIfMissing(paths.appConfigFile, [
+      seeds?.appConfigFile,
       paths.appConfigBundleFile,
       legacy?.appConfigBundleFile,
     ]);
@@ -2568,7 +2690,11 @@ async function enqueuePendingSyncOperation(
   );
 }
 
-function applyPendingQueueToLancamentos(baseLancamentos, queue, projectCode = getActiveProjectCode()) {
+function applyPendingQueueToLancamentos(
+  baseLancamentos,
+  queue,
+  projectCode = getActiveProjectCode()
+) {
   const normalizedProjectCode = normalizeProjectCode(projectCode, APP_PROJECT_CODE);
   const map = new Map((baseLancamentos ?? []).map((item) => [item.id, item]));
 
@@ -2606,10 +2732,9 @@ async function syncPendingOpsToSupabase(projectCode = APP_PROJECT_CODE) {
           }
           let { error } = await supabase
             .from(SUPABASE_LANCAMENTOS_TABLE)
-            .upsert(
-              lancamentoToSupabase(op.payload, normalizedProjectCode),
-              { onConflict: "project_code,id" }
-            );
+            .upsert(lancamentoToSupabase(op.payload, normalizedProjectCode), {
+              onConflict: "project_code,id",
+            });
           if (error && isSupabaseSchemaError(error)) {
             markSupabaseProjectCodeAsUnsupported();
             if (!shouldAllowLegacySupabaseFallback(normalizedProjectCode)) {
@@ -2641,7 +2766,10 @@ async function syncPendingOpsToSupabase(projectCode = APP_PROJECT_CODE) {
               );
             }
             warnSupabaseOnce("sync delete pendencias em modo legado", error);
-            ({ error } = await supabase.from(SUPABASE_LANCAMENTOS_TABLE).delete().eq("id", op.lancamentoId));
+            ({ error } = await supabase
+              .from(SUPABASE_LANCAMENTOS_TABLE)
+              .delete()
+              .eq("id", op.lancamentoId));
           }
           if (error) {
             throw new Error(error.message);
@@ -2818,7 +2946,9 @@ async function getLancamentos(projectCode = getActiveProjectCode()) {
       }
 
       if (error) {
-        throw new Error(`Erro ao consultar Supabase (${SUPABASE_LANCAMENTOS_TABLE}): ${error.message}`);
+        throw new Error(
+          `Erro ao consultar Supabase (${SUPABASE_LANCAMENTOS_TABLE}): ${error.message}`
+        );
       }
 
       const fromSupabase = (data ?? []).map(lancamentoFromSupabase).filter(Boolean);
@@ -2896,7 +3026,8 @@ async function insertLancamento(lancamento, projectCode = getActiveProjectCode()
     return {
       item: lancamento,
       syncStatus: "pending",
-      syncMessage: "Falha temporaria no banco. Lancamento salvo localmente e pendente de sincronizacao.",
+      syncMessage:
+        "Falha temporaria no banco. Lancamento salvo localmente e pendente de sincronizacao.",
     };
   }
 }
@@ -2948,12 +3079,19 @@ async function updateLancamentoById(id, lancamento, projectCode = getActiveProje
     if (!canUseSupabaseForProject(normalizedProjectCode)) {
       return { item: lancamento, syncStatus: "synced" };
     }
-    await enqueuePendingSyncOperation("update", id, lancamento, error?.message || error, normalizedProjectCode);
+    await enqueuePendingSyncOperation(
+      "update",
+      id,
+      lancamento,
+      error?.message || error,
+      normalizedProjectCode
+    );
     triggerPendingSync(normalizedProjectCode);
     return {
       item: lancamento,
       syncStatus: "pending",
-      syncMessage: "Falha temporaria no banco. Alteracao salva localmente e pendente de sincronizacao.",
+      syncMessage:
+        "Falha temporaria no banco. Alteracao salva localmente e pendente de sincronizacao.",
     };
   }
 }
@@ -2996,7 +3134,13 @@ async function deleteLancamentoById(id, projectCode = getActiveProjectCode()) {
     if (!canUseSupabaseForProject(normalizedProjectCode)) {
       return { removed: true, syncStatus: "synced" };
     }
-    await enqueuePendingSyncOperation("delete", id, null, error?.message || error, normalizedProjectCode);
+    await enqueuePendingSyncOperation(
+      "delete",
+      id,
+      null,
+      error?.message || error,
+      normalizedProjectCode
+    );
     triggerPendingSync(normalizedProjectCode);
     return {
       removed: true,
@@ -3004,12 +3148,6 @@ async function deleteLancamentoById(id, projectCode = getActiveProjectCode()) {
       syncMessage: "Falha temporaria no banco. Exclusao registrada e pendente de sincronizacao.",
     };
   }
-}
-
-function rowsToFormula(coluna, rows) {
-  if (rows.length === 0) return "0";
-  const refs = rows.map((row) => `${coluna}${row}`).join(",");
-  return `SUM(${refs})`;
 }
 
 function parseJsonBody(req, res) {
@@ -3045,40 +3183,19 @@ function validateAuthUserPasswordInput(rawPassword) {
   return { ok: true, value: password };
 }
 
-app.use((req, res, next) => {
-  for (const [header, value] of Object.entries(DEFAULT_SECURITY_HEADERS)) {
-    res.setHeader(header, value);
-  }
+app.use(
+  createSecurityHeadersMiddleware({
+    defaultSecurityHeaders: DEFAULT_SECURITY_HEADERS,
+    contentSecurityPolicy: CONTENT_SECURITY_POLICY,
+    shouldEnableHsts: (req) => process.env.NODE_ENV === "production" || req.secure,
+  })
+);
 
-  res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
-
-  if (process.env.NODE_ENV === "production" || req.secure) {
-    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  }
-
-  if (req.path.startsWith("/api/")) {
-    res.setHeader("Cache-Control", "no-store");
-  }
-
-  next();
-});
-
-app.use((req, res, next) => {
-  const method = req.method.toUpperCase();
-  const isStateChanging = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
-
-  if (!isStateChanging || !req.path.startsWith("/api/")) {
-    next();
-    return;
-  }
-
-  if (isTrustedRequestOrigin(req)) {
-    next();
-    return;
-  }
-
-  res.status(403).json({ error: "Origem da requisicao nao permitida." });
-});
+app.use(
+  createApiOriginGuardMiddleware({
+    isTrustedRequestOrigin,
+  })
+);
 
 app.use((req, _res, next) => {
   const session = getAuthSessionFromRequest(req);
@@ -3183,6 +3300,8 @@ app.use((req, res, next) => {
     req.path === "/login" ||
     req.path === "/login.html" ||
     req.path === "/login.js" ||
+    req.path === "/early-theme.js" ||
+    req.path === "/app/api-client.js" ||
     req.path === "/encoding-guard.js" ||
     req.path === "/styles.css" ||
     req.path === "/peocon-mark.svg" ||
@@ -3241,25 +3360,12 @@ app.get("/admin.html", (_req, res) => {
   res.redirect("/admin");
 });
 
-app.get("/api/projects/catalog", async (req, res) => {
-  const session = getAuthSessionFromRequest(req);
-  if (!session) {
-    res.status(401).json({ error: "Nao autenticado. Faca login para continuar." });
-    return;
-  }
-
-  const allowedProjects = getAllowedProjectsFromSession(session);
-  if (!Array.isArray(allowedProjects) || allowedProjects.length === 0) {
-    res.status(403).json({ error: "Usuario sem acesso a projetos ativos." });
-    return;
-  }
-
-  const catalog = await getProjectCatalog(allowedProjects);
-  res.json({
-    projects: catalog,
-    activeProjectCode: getProjectCodeFromSession(session),
-    catalogWritable: Boolean(SUPABASE_ENABLED && supabase),
-  });
+registerProjectRoutes(app, {
+  getAuthSessionFromRequest,
+  getAllowedProjectsFromSession,
+  getProjectCatalog,
+  getProjectCodeFromSession,
+  isCatalogWritable: () => Boolean(SUPABASE_ENABLED && supabase),
 });
 
 app.get("/api/admin/users", requireSuperAdmin, (_req, res) => {
@@ -3303,10 +3409,9 @@ app.post("/api/admin/users", requireSuperAdmin, async (req, res) => {
     return;
   }
 
-  const allowedProjects = normalizeAllowedProjectsInput(
-    body.allowedProjects ?? body.projects,
-    [APP_PROJECT_CODE]
-  );
+  const allowedProjects = normalizeAllowedProjectsInput(body.allowedProjects ?? body.projects, [
+    APP_PROJECT_CODE,
+  ]);
   if (allowedProjects.length === 0) {
     res.status(400).json({ error: "Informe ao menos um projeto permitido." });
     return;
@@ -3334,7 +3439,14 @@ app.post("/api/admin/users", requireSuperAdmin, async (req, res) => {
   setAuthUsers([...authUsers, normalized]);
   await schedulePersistAuthUsers();
   const created = getAuthUserByUsername(username);
-  await writeAuditLog(req, "admin.user.create", "auth_user", normalized.id, null, sanitizeAuthUserForList(created));
+  await writeAuditLog(
+    req,
+    "admin.user.create",
+    "auth_user",
+    normalized.id,
+    null,
+    sanitizeAuthUserForList(created)
+  );
   res.status(201).json({
     ok: true,
     user: sanitizeAuthUserForList(created),
@@ -3498,7 +3610,9 @@ app.post("/api/topicos", requireAnyRole([AUTH_ROLE_ADMIN]), async (req, res) => 
 
   const incluirNoResumo = body.incluirNoResumo !== undefined ? Boolean(body.incluirNoResumo) : true;
   const permitirLancamento =
-    body.permitirLancamento !== undefined ? Boolean(body.permitirLancamento) : !isTeamHiresGroupName(grupo);
+    body.permitirLancamento !== undefined
+      ? Boolean(body.permitirLancamento)
+      : !isTeamHiresGroupName(grupo);
 
   const usedIds = new Set(topicos.map((item) => String(item.id)));
   const requestedId = String(body.id ?? "").trim();
@@ -3542,14 +3656,11 @@ app.put("/api/topicos/:id", requireAnyRole([AUTH_ROLE_ADMIN]), async (req, res) 
 
   const atual = topicos[index];
 
-  const nomeValidation = validateBoundedString(
-    body.nome !== undefined ? body.nome : atual.nome,
-    {
-      fieldLabel: "Nome do topico",
-      required: true,
-      maxLength: FIELD_LIMITS.topicoNome,
-    }
-  );
+  const nomeValidation = validateBoundedString(body.nome !== undefined ? body.nome : atual.nome, {
+    fieldLabel: "Nome do topico",
+    required: true,
+    maxLength: FIELD_LIMITS.topicoNome,
+  });
   if (!nomeValidation.ok) {
     res.status(400).json({ error: nomeValidation.error });
     return;
@@ -3557,7 +3668,7 @@ app.put("/api/topicos/:id", requireAnyRole([AUTH_ROLE_ADMIN]), async (req, res) 
   const nome = nomeValidation.value;
 
   const grupoValidation = validateBoundedString(
-    body.grupo !== undefined ? body.grupo : atual.grupo ?? "COMMUNICATIONS & PUBLICATIONS",
+    body.grupo !== undefined ? body.grupo : (atual.grupo ?? "COMMUNICATIONS & PUBLICATIONS"),
     {
       fieldLabel: "Grupo",
       required: true,
@@ -3574,7 +3685,9 @@ app.put("/api/topicos/:id", requireAnyRole([AUTH_ROLE_ADMIN]), async (req, res) 
   );
 
   const orcamentoInput =
-    body.orcamentoProgramaBRL !== undefined ? body.orcamentoProgramaBRL : atual.orcamentoProgramaBRL;
+    body.orcamentoProgramaBRL !== undefined
+      ? body.orcamentoProgramaBRL
+      : atual.orcamentoProgramaBRL;
   const orcamentoProgramaBRL = toNumber(orcamentoInput);
   if (!Number.isFinite(orcamentoProgramaBRL) || orcamentoProgramaBRL < 0) {
     res.status(400).json({ error: "Orçamento inválido." });
@@ -3582,13 +3695,14 @@ app.put("/api/topicos/:id", requireAnyRole([AUTH_ROLE_ADMIN]), async (req, res) 
   }
 
   const incluirNoResumo =
-    body.incluirNoResumo !== undefined ? Boolean(body.incluirNoResumo) : Boolean(atual.incluirNoResumo);
-  const permitirLancamento =
-    isTeamHiresGroupName(grupo)
-      ? false
-      : body.permitirLancamento !== undefined
-        ? Boolean(body.permitirLancamento)
-        : Boolean(atual.permitirLancamento);
+    body.incluirNoResumo !== undefined
+      ? Boolean(body.incluirNoResumo)
+      : Boolean(atual.incluirNoResumo);
+  const permitirLancamento = isTeamHiresGroupName(grupo)
+    ? false
+    : body.permitirLancamento !== undefined
+      ? Boolean(body.permitirLancamento)
+      : Boolean(atual.permitirLancamento);
 
   const atualizado = {
     ...atual,
@@ -3721,228 +3835,250 @@ app.get("/api/lancamentos", async (req, res) => {
   });
 });
 
-app.post("/api/lancamentos", requireAnyRole([AUTH_ROLE_ADMIN, AUTH_ROLE_EDITOR]), async (req, res) => {
-  const body = parseJsonBody(req, res);
-  if (!body) return;
+app.post(
+  "/api/lancamentos",
+  requireAnyRole([AUTH_ROLE_ADMIN, AUTH_ROLE_EDITOR]),
+  async (req, res) => {
+    const body = parseJsonBody(req, res);
+    if (!body) return;
 
-  const topicos = await getTopicos();
-  const topicoIdValidation = validateBoundedString(body.topicoId, {
-    fieldLabel: "Tópico",
-    required: true,
-    maxLength: 80,
-  });
-  if (!topicoIdValidation.ok) {
-    res.status(400).json({ error: topicoIdValidation.error });
-    return;
-  }
-  const topicoId = topicoIdValidation.value;
-  const topico = topicos.find((item) => item.id === topicoId);
-
-  if (!topico || !canLancarNoTopico(topico)) {
-    res.status(400).json({ error: "Tópico inválido ou bloqueado." });
-    return;
-  }
-
-  if (!isIsoDate(body.data)) {
-    res.status(400).json({ error: "Data invalida. Use YYYY-MM-DD." });
-    return;
-  }
-
-  const descricaoValidation = validateBoundedString(body.descricao, {
-    fieldLabel: "Descricao",
-    required: true,
-    maxLength: FIELD_LIMITS.descricao,
-  });
-  if (!descricaoValidation.ok) {
-    res.status(400).json({ error: descricaoValidation.error });
-    return;
-  }
-  const descricao = descricaoValidation.value;
-  if (hasSpreadsheetFormulaPrefix(descricao)) {
-    res.status(400).json({ error: "Descricao nao pode iniciar com formula de planilha." });
-    return;
-  }
-
-  const valor = toNumber(body.valor);
-  if (!Number.isFinite(valor) || valor <= 0) {
-    res.status(400).json({ error: "Valor inválido." });
-    return;
-  }
-
-  const fornecedorValidation = validateBoundedString(body.fornecedor ?? "", {
-    fieldLabel: "Fornecedor",
-    maxLength: FIELD_LIMITS.fornecedor,
-  });
-  if (!fornecedorValidation.ok) {
-    res.status(400).json({ error: fornecedorValidation.error });
-    return;
-  }
-
-  const responsavelValidation = validateBoundedString(body.responsavel ?? "", {
-    fieldLabel: "Responsavel",
-    maxLength: FIELD_LIMITS.responsavel,
-  });
-  if (!responsavelValidation.ok) {
-    res.status(400).json({ error: responsavelValidation.error });
-    return;
-  }
-
-  const fornecedor = fornecedorValidation.value;
-  const responsavel = responsavelValidation.value;
-  const { ano, semestre } = getAnoSemestre(body.data);
-
-  const novo = {
-    id: uuidv4(),
-    topicoId,
-    data: body.data,
-    descricao,
-    fornecedor,
-    responsavel,
-    valor: round2(valor),
-    semestre,
-    ano,
-    criadoEm: new Date().toISOString(),
-    atualizadoEm: new Date().toISOString(),
-  };
-
-  const result = await insertLancamento(novo);
-  await writeAuditLog(
-    req,
-    "lancamento.create",
-    "lancamento",
-    result.item?.id ?? novo.id,
-    null,
-    result.item ?? novo
-  );
-  res.status(201).json({
-    ...result.item,
-    syncStatus: result.syncStatus,
-    syncMessage: result.syncMessage ?? null,
-  });
-});
-
-app.put("/api/lancamentos/:id", requireAnyRole([AUTH_ROLE_ADMIN, AUTH_ROLE_EDITOR]), async (req, res) => {
-  const body = parseJsonBody(req, res);
-  if (!body) return;
-
-  const [topicos, existente] = await Promise.all([getTopicos(), getLancamentoById(req.params.id)]);
-
-  if (!existente) {
-    res.status(404).json({ error: "Lancamento nao encontrado." });
-    return;
-  }
-
-  const topicoIdValidation = validateBoundedString(
-    body.topicoId !== undefined ? body.topicoId : existente.topicoId,
-    {
+    const topicos = await getTopicos();
+    const topicoIdValidation = validateBoundedString(body.topicoId, {
       fieldLabel: "Tópico",
       required: true,
       maxLength: 80,
+    });
+    if (!topicoIdValidation.ok) {
+      res.status(400).json({ error: topicoIdValidation.error });
+      return;
     }
-  );
-  if (!topicoIdValidation.ok) {
-    res.status(400).json({ error: topicoIdValidation.error });
-    return;
-  }
-  const topicoId = topicoIdValidation.value;
-  const topico = topicos.find((item) => item.id === topicoId);
-  if (!topico || !canLancarNoTopico(topico)) {
-    res.status(400).json({ error: "Tópico inválido ou bloqueado." });
-    return;
-  }
+    const topicoId = topicoIdValidation.value;
+    const topico = topicos.find((item) => item.id === topicoId);
 
-  const data = body.data ?? existente.data;
-  if (!isIsoDate(data)) {
-    res.status(400).json({ error: "Data invalida. Use YYYY-MM-DD." });
-    return;
-  }
+    if (!topico || !canLancarNoTopico(topico)) {
+      res.status(400).json({ error: "Tópico inválido ou bloqueado." });
+      return;
+    }
 
-  const descricaoValidation = validateBoundedString(
-    body.descricao !== undefined ? body.descricao : existente.descricao,
-    {
+    if (!isIsoDate(body.data)) {
+      res.status(400).json({ error: "Data invalida. Use YYYY-MM-DD." });
+      return;
+    }
+
+    const descricaoValidation = validateBoundedString(body.descricao, {
       fieldLabel: "Descricao",
       required: true,
       maxLength: FIELD_LIMITS.descricao,
+    });
+    if (!descricaoValidation.ok) {
+      res.status(400).json({ error: descricaoValidation.error });
+      return;
     }
-  );
-  if (!descricaoValidation.ok) {
-    res.status(400).json({ error: descricaoValidation.error });
-    return;
-  }
-  const descricao = descricaoValidation.value;
-  if (hasSpreadsheetFormulaPrefix(descricao)) {
-    res.status(400).json({ error: "Descricao nao pode iniciar com formula de planilha." });
-    return;
-  }
+    const descricao = descricaoValidation.value;
+    if (hasSpreadsheetFormulaPrefix(descricao)) {
+      res.status(400).json({ error: "Descricao nao pode iniciar com formula de planilha." });
+      return;
+    }
 
-  const valor = body.valor !== undefined ? toNumber(body.valor) : existente.valor;
-  if (!Number.isFinite(valor) || valor <= 0) {
-    res.status(400).json({ error: "Valor inválido." });
-    return;
-  }
+    const valor = toNumber(body.valor);
+    if (!Number.isFinite(valor) || valor <= 0) {
+      res.status(400).json({ error: "Valor inválido." });
+      return;
+    }
 
-  const fornecedorValidation = validateBoundedString(
-    body.fornecedor !== undefined ? body.fornecedor : existente.fornecedor ?? "",
-    {
+    const fornecedorValidation = validateBoundedString(body.fornecedor ?? "", {
       fieldLabel: "Fornecedor",
       maxLength: FIELD_LIMITS.fornecedor,
+    });
+    if (!fornecedorValidation.ok) {
+      res.status(400).json({ error: fornecedorValidation.error });
+      return;
     }
-  );
-  if (!fornecedorValidation.ok) {
-    res.status(400).json({ error: fornecedorValidation.error });
-    return;
-  }
 
-  const responsavelValidation = validateBoundedString(
-    body.responsavel !== undefined ? body.responsavel : existente.responsavel ?? "",
-    {
+    const responsavelValidation = validateBoundedString(body.responsavel ?? "", {
       fieldLabel: "Responsavel",
       maxLength: FIELD_LIMITS.responsavel,
+    });
+    if (!responsavelValidation.ok) {
+      res.status(400).json({ error: responsavelValidation.error });
+      return;
     }
-  );
-  if (!responsavelValidation.ok) {
-    res.status(400).json({ error: responsavelValidation.error });
-    return;
+
+    const fornecedor = fornecedorValidation.value;
+    const responsavel = responsavelValidation.value;
+    const { ano, semestre } = getAnoSemestre(body.data);
+
+    const novo = {
+      id: uuidv4(),
+      topicoId,
+      data: body.data,
+      descricao,
+      fornecedor,
+      responsavel,
+      valor: round2(valor),
+      semestre,
+      ano,
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+    };
+
+    const result = await insertLancamento(novo);
+    await writeAuditLog(
+      req,
+      "lancamento.create",
+      "lancamento",
+      result.item?.id ?? novo.id,
+      null,
+      result.item ?? novo
+    );
+    res.status(201).json({
+      ...result.item,
+      syncStatus: result.syncStatus,
+      syncMessage: result.syncMessage ?? null,
+    });
   }
+);
 
-  const { ano, semestre } = getAnoSemestre(data);
+app.put(
+  "/api/lancamentos/:id",
+  requireAnyRole([AUTH_ROLE_ADMIN, AUTH_ROLE_EDITOR]),
+  async (req, res) => {
+    const body = parseJsonBody(req, res);
+    if (!body) return;
 
-  const atualizado = {
-    ...existente,
-    topicoId,
-    data,
-    descricao,
-    fornecedor: fornecedorValidation.value,
-    responsavel: responsavelValidation.value,
-    valor: round2(valor),
-    ano,
-    semestre,
-    atualizadoEm: new Date().toISOString(),
-  };
+    const [topicos, existente] = await Promise.all([
+      getTopicos(),
+      getLancamentoById(req.params.id),
+    ]);
 
-  const result = await updateLancamentoById(req.params.id, atualizado);
-  if (!result.item) {
-    res.status(404).json({ error: "Lancamento nao encontrado." });
-    return;
+    if (!existente) {
+      res.status(404).json({ error: "Lancamento nao encontrado." });
+      return;
+    }
+
+    const topicoIdValidation = validateBoundedString(
+      body.topicoId !== undefined ? body.topicoId : existente.topicoId,
+      {
+        fieldLabel: "Tópico",
+        required: true,
+        maxLength: 80,
+      }
+    );
+    if (!topicoIdValidation.ok) {
+      res.status(400).json({ error: topicoIdValidation.error });
+      return;
+    }
+    const topicoId = topicoIdValidation.value;
+    const topico = topicos.find((item) => item.id === topicoId);
+    if (!topico || !canLancarNoTopico(topico)) {
+      res.status(400).json({ error: "Tópico inválido ou bloqueado." });
+      return;
+    }
+
+    const data = body.data ?? existente.data;
+    if (!isIsoDate(data)) {
+      res.status(400).json({ error: "Data invalida. Use YYYY-MM-DD." });
+      return;
+    }
+
+    const descricaoValidation = validateBoundedString(
+      body.descricao !== undefined ? body.descricao : existente.descricao,
+      {
+        fieldLabel: "Descricao",
+        required: true,
+        maxLength: FIELD_LIMITS.descricao,
+      }
+    );
+    if (!descricaoValidation.ok) {
+      res.status(400).json({ error: descricaoValidation.error });
+      return;
+    }
+    const descricao = descricaoValidation.value;
+    if (hasSpreadsheetFormulaPrefix(descricao)) {
+      res.status(400).json({ error: "Descricao nao pode iniciar com formula de planilha." });
+      return;
+    }
+
+    const valor = body.valor !== undefined ? toNumber(body.valor) : existente.valor;
+    if (!Number.isFinite(valor) || valor <= 0) {
+      res.status(400).json({ error: "Valor inválido." });
+      return;
+    }
+
+    const fornecedorValidation = validateBoundedString(
+      body.fornecedor !== undefined ? body.fornecedor : (existente.fornecedor ?? ""),
+      {
+        fieldLabel: "Fornecedor",
+        maxLength: FIELD_LIMITS.fornecedor,
+      }
+    );
+    if (!fornecedorValidation.ok) {
+      res.status(400).json({ error: fornecedorValidation.error });
+      return;
+    }
+
+    const responsavelValidation = validateBoundedString(
+      body.responsavel !== undefined ? body.responsavel : (existente.responsavel ?? ""),
+      {
+        fieldLabel: "Responsavel",
+        maxLength: FIELD_LIMITS.responsavel,
+      }
+    );
+    if (!responsavelValidation.ok) {
+      res.status(400).json({ error: responsavelValidation.error });
+      return;
+    }
+
+    const { ano, semestre } = getAnoSemestre(data);
+
+    const atualizado = {
+      ...existente,
+      topicoId,
+      data,
+      descricao,
+      fornecedor: fornecedorValidation.value,
+      responsavel: responsavelValidation.value,
+      valor: round2(valor),
+      ano,
+      semestre,
+      atualizadoEm: new Date().toISOString(),
+    };
+
+    const result = await updateLancamentoById(req.params.id, atualizado);
+    if (!result.item) {
+      res.status(404).json({ error: "Lancamento nao encontrado." });
+      return;
+    }
+    await writeAuditLog(
+      req,
+      "lancamento.update",
+      "lancamento",
+      req.params.id,
+      existente,
+      result.item
+    );
+    res.json({
+      ...result.item,
+      syncStatus: result.syncStatus,
+      syncMessage: result.syncMessage ?? null,
+    });
   }
-  await writeAuditLog(req, "lancamento.update", "lancamento", req.params.id, existente, result.item);
-  res.json({
-    ...result.item,
-    syncStatus: result.syncStatus,
-    syncMessage: result.syncMessage ?? null,
-  });
-});
+);
 
-app.delete("/api/lancamentos/:id", requireAnyRole([AUTH_ROLE_ADMIN, AUTH_ROLE_EDITOR]), async (req, res) => {
-  const existente = await getLancamentoById(req.params.id);
-  const result = await deleteLancamentoById(req.params.id);
-  if (!result.removed) {
-    res.status(404).json({ error: "Lancamento nao encontrado." });
-    return;
+app.delete(
+  "/api/lancamentos/:id",
+  requireAnyRole([AUTH_ROLE_ADMIN, AUTH_ROLE_EDITOR]),
+  async (req, res) => {
+    const existente = await getLancamentoById(req.params.id);
+    const result = await deleteLancamentoById(req.params.id);
+    if (!result.removed) {
+      res.status(404).json({ error: "Lancamento nao encontrado." });
+      return;
+    }
+    await writeAuditLog(req, "lancamento.delete", "lancamento", req.params.id, existente, null);
+    res.status(204).end();
   }
-  await writeAuditLog(req, "lancamento.delete", "lancamento", req.params.id, existente, null);
-  res.status(204).end();
-});
+);
 
 app.get("/api/resumo", async (req, res) => {
   const [topicos, lancamentos] = await Promise.all([getTopicos(), getLancamentos()]);
@@ -3967,7 +4103,9 @@ app.get("/api/topicos/:id/detalhes", async (req, res) => {
   const filters = parseFilters(req.query);
   filters.topicoId = topico.id;
 
-  const filtrados = filtrarLancamentos(lancamentos, filters).sort((a, b) => b.data.localeCompare(a.data));
+  const filtrados = filtrarLancamentos(lancamentos, filters).sort((a, b) =>
+    b.data.localeCompare(a.data)
+  );
   const total = round2(filtrados.reduce((sum, item) => sum + item.valor, 0));
 
   res.json({
@@ -3982,13 +4120,14 @@ app.get("/api/export/csv", async (req, res) => {
   const [topicos, lancamentos] = await Promise.all([getTopicos(), getLancamentos()]);
   const topicosOrdenados = [...topicos].sort(
     (a, b) =>
-      (a.ordem ?? 0) - (b.ordem ?? 0) ||
-      String(a.nome ?? "").localeCompare(String(b.nome ?? ""))
+      (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.nome ?? "").localeCompare(String(b.nome ?? ""))
   );
   const topicosMap = new Map(topicosOrdenados.map((topico) => [topico.id, topico]));
   const filters = parseFilters(req.query);
 
-  const linhas = filtrarLancamentos(lancamentos, filters).sort((a, b) => a.data.localeCompare(b.data));
+  const linhas = filtrarLancamentos(lancamentos, filters).sort((a, b) =>
+    a.data.localeCompare(b.data)
+  );
   const header = [
     "Tópico",
     "Data",
@@ -4028,17 +4167,14 @@ app.get("/api/export/csv", async (req, res) => {
     .filter((topico) => topico?.incluirNoResumo !== false)
     .map((topico) => {
       const resumoRow = resumoByTopico.get(topico.id);
-      const orcamento = round2(Number(resumoRow?.orcamentoProgramaBRL ?? topico.orcamentoProgramaBRL ?? 0));
+      const orcamento = round2(
+        Number(resumoRow?.orcamentoProgramaBRL ?? topico.orcamentoProgramaBRL ?? 0)
+      );
       const anteriores = round2(Number(resumoRow?.despesasAnteriores ?? 0));
       const periodo = round2(Number(resumoRow?.despesasPeriodo ?? 0));
       const total = round2(Number(resumoRow?.despesasAteData ?? anteriores + periodo));
       const saldo = round2(Number(resumoRow?.saldoRemanescente ?? orcamento - total));
-      const percentual =
-        orcamento > 0
-          ? round2((total / orcamento) * 100)
-          : total > 0
-            ? 999
-            : 0;
+      const percentual = orcamento > 0 ? round2((total / orcamento) * 100) : total > 0 ? 999 : 0;
 
       return [
         topicLabelPt(topico?.nome ?? topico.id),
@@ -4052,14 +4188,7 @@ app.get("/api/export/csv", async (req, res) => {
       ];
     });
 
-  const csvRows = [
-    header,
-    ...body,
-    [],
-    ["Resumo por Tópico"],
-    resumoHeader,
-    ...resumoBody,
-  ];
+  const csvRows = [header, ...body, [], ["Resumo por Tópico"], resumoHeader, ...resumoBody];
   const csv = csvRows.map((row) => row.map(csvEscape).join(",")).join("\n");
   const fileName = `lancamentos_${new Date().toISOString().slice(0, 10)}.csv`;
 
@@ -4072,7 +4201,9 @@ app.get("/api/export/pdf", async (req, res) => {
   const [topicos, lancamentos] = await Promise.all([getTopicos(), getLancamentos()]);
   const filters = parseFilters(req.query);
 
-  const filtrados = filtrarLancamentos(lancamentos, filters).sort((a, b) => a.data.localeCompare(b.data));
+  const filtrados = filtrarLancamentos(lancamentos, filters).sort((a, b) =>
+    a.data.localeCompare(b.data)
+  );
   if (filtrados.length > PDF_EXPORT_MAX_ITEMS) {
     res.status(413).json({
       error: `Exportacao PDF limitada a ${PDF_EXPORT_MAX_ITEMS} lancamentos por vez. Refine os filtros.`,
@@ -4081,11 +4212,7 @@ app.get("/api/export/pdf", async (req, res) => {
   }
   const topicosOrdenados = [...topicos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
   const topicosResumo = topicosOrdenados.filter((topico) => topico?.incluirNoResumo !== false);
-  const groupOrder = [
-    "TEAM HIRES",
-    "COMMUNICATIONS & PUBLICATIONS",
-    "THIRD PARTY SERVICES",
-  ];
+  const groupOrder = ["TEAM HIRES", "COMMUNICATIONS & PUBLICATIONS", "THIRD PARTY SERVICES"];
 
   const lancamentosPorTopico = new Map();
   for (const item of filtrados) {
@@ -4116,14 +4243,10 @@ app.get("/api/export/pdf", async (req, res) => {
   for (const topico of topicosResumo) {
     const items = lancamentosPorTopico.get(topico.id) ?? [];
     const totalS1 = round2(
-      items
-        .filter((item) => item.semestre === "S1")
-        .reduce((sum, item) => sum + item.valor, 0)
+      items.filter((item) => item.semestre === "S1").reduce((sum, item) => sum + item.valor, 0)
     );
     const totalS2 = round2(
-      items
-        .filter((item) => item.semestre === "S2")
-        .reduce((sum, item) => sum + item.valor, 0)
+      items.filter((item) => item.semestre === "S2").reduce((sum, item) => sum + item.valor, 0)
     );
     const total = round2(totalS1 + totalS2);
 
@@ -4215,19 +4338,15 @@ app.get("/api/export/pdf", async (req, res) => {
           width: contentWidth,
           lineBreak: false,
         });
-      doc
-        .fontSize(8)
-        .text(`Gerado em ${generatedAt}`, marginX, 73, {
-          width: contentWidth - 80,
-          lineBreak: false,
-        });
-      doc
-        .font("Helvetica-Bold")
-        .text(`Página ${pageNumber}`, marginX, 73, {
-          width: contentWidth,
-          align: "right",
-          lineBreak: false,
-        });
+      doc.fontSize(8).text(`Gerado em ${generatedAt}`, marginX, 73, {
+        width: contentWidth - 80,
+        lineBreak: false,
+      });
+      doc.font("Helvetica-Bold").text(`Página ${pageNumber}`, marginX, 73, {
+        width: contentWidth,
+        align: "right",
+        lineBreak: false,
+      });
       doc.restore();
       doc.y = 110;
       return;
@@ -4347,7 +4466,12 @@ app.get("/api/export/pdf", async (req, res) => {
         ellipsis: true,
       });
       x += col.width;
-      doc.moveTo(x, y).lineTo(x, y + height).lineWidth(0.4).strokeColor(palette.border).stroke();
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + height)
+        .lineWidth(0.4)
+        .strokeColor(palette.border)
+        .stroke();
     }
     doc.rect(marginX, y, contentWidth, height).lineWidth(0.5).strokeColor(palette.border).stroke();
     doc.y = y + height;
@@ -4378,7 +4502,12 @@ app.get("/api/export/pdf", async (req, res) => {
         ellipsis: true,
       });
       x += col.width;
-      doc.moveTo(x, y).lineTo(x, y + height).lineWidth(0.35).strokeColor(palette.border).stroke();
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + height)
+        .lineWidth(0.35)
+        .strokeColor(palette.border)
+        .stroke();
     }
 
     doc.rect(marginX, y, contentWidth, height).lineWidth(0.35).strokeColor(palette.border).stroke();
@@ -4401,20 +4530,19 @@ app.get("/api/export/pdf", async (req, res) => {
         lineBreak: false,
         ellipsis: true,
       });
-    doc
-      .text(
-        `Tópicos ${groupStats.quantidadeTopicos} | Lanc. ${groupStats.quantidadeLancamentos} | Total ${formatCurrency(
-          groupStats.total
-        )}`,
-        marginX + 210,
-        y + (compact ? 6 : 7),
-        {
-          width: contentWidth - 220,
-          align: "right",
-          lineBreak: false,
-          ellipsis: true,
-        }
-      );
+    doc.text(
+      `Tópicos ${groupStats.quantidadeTopicos} | Lanc. ${groupStats.quantidadeLancamentos} | Total ${formatCurrency(
+        groupStats.total
+      )}`,
+      marginX + 210,
+      y + (compact ? 6 : 7),
+      {
+        width: contentWidth - 220,
+        align: "right",
+        lineBreak: false,
+        ellipsis: true,
+      }
+    );
     doc.y = y + height + 6;
   }
 
@@ -4596,7 +4724,10 @@ app.get("/api/export/excel", async (req, res) => {
     return;
   }
 
-  const [topicos, lancamentos] = await Promise.all([getTopicos(projectCode), getLancamentos(projectCode)]);
+  const [topicos, lancamentos] = await Promise.all([
+    getTopicos(projectCode),
+    getLancamentos(projectCode),
+  ]);
   const filters = parseFilters(req.query);
   const lancamentosFiltrados = filtrarLancamentos(lancamentos, filters);
   const periodoEfetivo = getPeriodoEfetivo(filters, lancamentosFiltrados);
@@ -4606,7 +4737,9 @@ app.get("/api/export/excel", async (req, res) => {
   const workbook = await XlsxPopulate.fromFileAsync(templateFile);
 
   function buildResumoMetric(topico, resumoRow) {
-    const budget = round2(Number(resumoRow?.orcamentoProgramaBRL ?? topico.orcamentoProgramaBRL ?? 0));
+    const budget = round2(
+      Number(resumoRow?.orcamentoProgramaBRL ?? topico.orcamentoProgramaBRL ?? 0)
+    );
     const prior = round2(Number(resumoRow?.despesasAnteriores ?? 0));
     const current = round2(Number(resumoRow?.despesasPeriodo ?? 0));
     const total = round2(Number(resumoRow?.despesasAteData ?? prior + current));
@@ -4647,13 +4780,16 @@ app.get("/api/export/excel", async (req, res) => {
     const mappedExcludedBySheet = new Map();
 
     for (const topico of topicos) {
-      const templateRow = Number.isFinite(Number(topico?.templateRow)) ? Number(topico.templateRow) : null;
+      const templateRow = Number.isFinite(Number(topico?.templateRow))
+        ? Number(topico.templateRow)
+        : null;
       if (!templateRow || templateRow <= 0) continue;
 
       const sheetName = resolveTemplateSheetForTopico(topico, projectDefinition);
       if (!sheetName) continue;
 
-      const targetMap = topico?.incluirNoResumo !== false ? mappedIncludedBySheet : mappedExcludedBySheet;
+      const targetMap =
+        topico?.incluirNoResumo !== false ? mappedIncludedBySheet : mappedExcludedBySheet;
       if (!targetMap.has(sheetName)) {
         targetMap.set(sheetName, []);
       }
@@ -4663,9 +4799,8 @@ app.get("/api/export/excel", async (req, res) => {
     const referencedSheets = new Set([
       ...mappedIncludedBySheet.keys(),
       ...mappedExcludedBySheet.keys(),
-      ...(projectDefinition.sheetDateCells ?? []
-        .map((entry) => normalizeWorkbookSheetName(entry?.sheet ?? entry, ""))
-        .filter(Boolean)),
+      ...(projectDefinition.sheetDateCells ??
+        [].map((entry) => normalizeWorkbookSheetName(entry?.sheet ?? entry, "")).filter(Boolean)),
       normalizeWorkbookSheetName(projectDefinition.primarySheetName, ""),
     ]);
 
@@ -4694,17 +4829,30 @@ app.get("/api/export/excel", async (req, res) => {
     const dateTargets =
       Array.isArray(projectDefinition.sheetDateCells) && projectDefinition.sheetDateCells.length > 0
         ? projectDefinition.sheetDateCells
-        : [{ sheet: normalizeWorkbookSheetName(projectDefinition.primarySheetName, "Expenditure"), fromCell: "G4", toCell: "G7" }];
+        : [
+            {
+              sheet: normalizeWorkbookSheetName(projectDefinition.primarySheetName, "Expenditure"),
+              fromCell: "G4",
+              toCell: "G7",
+            },
+          ];
 
     for (const target of dateTargets) {
       const sheetName = normalizeWorkbookSheetName(target?.sheet ?? target, "");
       if (!sheetName) continue;
       const sheet = workbook.sheet(sheetName);
       if (!sheet) continue;
-      applyDateRangeOnSheet(sheet, String(target?.fromCell ?? "G4"), String(target?.toCell ?? "G7"));
+      applyDateRangeOnSheet(
+        sheet,
+        String(target?.fromCell ?? "G4"),
+        String(target?.toCell ?? "G7")
+      );
     }
   } else {
-    const primarySheetName = normalizeWorkbookSheetName(projectDefinition.primarySheetName, "Expenditure");
+    const primarySheetName = normalizeWorkbookSheetName(
+      projectDefinition.primarySheetName,
+      "Expenditure"
+    );
     const sheet = workbook.sheet(primarySheetName);
     if (!sheet) {
       res.status(500).json({
@@ -4719,7 +4867,9 @@ app.get("/api/export/excel", async (req, res) => {
 
     for (const topico of topicos) {
       const incluirNoResumo = topico?.incluirNoResumo !== false;
-      const templateRow = Number.isFinite(Number(topico?.templateRow)) ? Number(topico.templateRow) : null;
+      const templateRow = Number.isFinite(Number(topico?.templateRow))
+        ? Number(topico.templateRow)
+        : null;
 
       if (templateRow && templateRow > 0) {
         if (incluirNoResumo) {
@@ -4750,14 +4900,20 @@ app.get("/api/export/excel", async (req, res) => {
     const EXTRA_START_ROW = 31;
     const BASE_TOTAL_ROW = 32;
 
-    const extraTemplateStyleIds = TABLE_COLUMNS.map((col) => sheet.cell(`${col}${EXTRA_START_ROW}`)._styleId);
+    const extraTemplateStyleIds = TABLE_COLUMNS.map(
+      (col) => sheet.cell(`${col}${EXTRA_START_ROW}`)._styleId
+    );
     const extraTemplateRowHeight = sheet.row(EXTRA_START_ROW).height();
-    const totalTemplateStyleIds = TABLE_COLUMNS.map((col) => sheet.cell(`${col}${BASE_TOTAL_ROW}`)._styleId);
+    const totalTemplateStyleIds = TABLE_COLUMNS.map(
+      (col) => sheet.cell(`${col}${BASE_TOTAL_ROW}`)._styleId
+    );
     const totalTemplateRowHeight = sheet.row(BASE_TOTAL_ROW).height();
     const totalTemplateLabel = sheet.cell(`A${BASE_TOTAL_ROW}`).value();
 
     function clearRowCells(rowNumber) {
-      sheet.range(`A${rowNumber}:G${rowNumber}`).value([[null, null, null, null, null, null, null]]);
+      sheet
+        .range(`A${rowNumber}:G${rowNumber}`)
+        .value([[null, null, null, null, null, null, null]]);
     }
 
     function copyRowCells(sourceRow, targetRow) {
@@ -4837,9 +4993,7 @@ app.get("/api/export/excel", async (req, res) => {
     const totalStartRow = 14;
     const totalEndRow = totalRow - 1;
     applyTotalTemplateRow(totalRow);
-    sheet
-      .cell(`A${totalRow}`)
-      .value(totalTemplateLabel ?? "Total Budget and Expenditure");
+    sheet.cell(`A${totalRow}`).value(totalTemplateLabel ?? "Total Budget and Expenditure");
     sheet.cell(`B${totalRow}`).formula(`SUM(B${totalStartRow}:B${totalEndRow})`);
     sheet.cell(`C${totalRow}`).formula(`SUM(C${totalStartRow}:C${totalEndRow})`);
     sheet.cell(`D${totalRow}`).formula(`SUM(D${totalStartRow}:D${totalEndRow})`);
@@ -4856,18 +5010,20 @@ app.get("/api/export/excel", async (req, res) => {
       extrasSheet.usedRange().clear();
     }
 
-    extrasSheet.range("A1:H1").value([
-      [
-        "Tópico",
-        "Grupo",
-        "Orcamento",
-        "Despesas Anteriores",
-        "Despesas Periodo",
-        "Despesas Totais",
-        "Saldo",
-        "% Execucao",
-      ],
-    ]);
+    extrasSheet
+      .range("A1:H1")
+      .value([
+        [
+          "Tópico",
+          "Grupo",
+          "Orcamento",
+          "Despesas Anteriores",
+          "Despesas Periodo",
+          "Despesas Totais",
+          "Saldo",
+          "% Execucao",
+        ],
+      ]);
 
     if (extrasIncluded.length === 0) {
       extrasSheet.cell("A2").value("Sem topicos extras incluidos no resumo.");
@@ -4876,18 +5032,20 @@ app.get("/api/export/excel", async (req, res) => {
         const rowIndex = index + 2;
         const resumoRow = resumoByTopico.get(topico.id);
         const metric = buildResumoMetric(topico, resumoRow);
-        extrasSheet.range(`A${rowIndex}:H${rowIndex}`).value([
-          [
-            String(topico?.nome ?? topico?.id ?? ""),
-            String(topico?.grupo ?? ""),
-            metric.budget,
-            metric.prior,
-            metric.current,
-            metric.total,
-            metric.balance,
-            metric.percent,
-          ],
-        ]);
+        extrasSheet
+          .range(`A${rowIndex}:H${rowIndex}`)
+          .value([
+            [
+              String(topico?.nome ?? topico?.id ?? ""),
+              String(topico?.grupo ?? ""),
+              metric.budget,
+              metric.prior,
+              metric.current,
+              metric.total,
+              metric.balance,
+              metric.percent,
+            ],
+          ]);
       });
     }
 
@@ -4895,7 +5053,9 @@ app.get("/api/export/excel", async (req, res) => {
   }
 
   const output = await workbook.outputAsync();
-  const rawPrefix = String(projectDefinition.exportFilePrefix ?? `${projectCode}_Expenditure_Atualizado`);
+  const rawPrefix = String(
+    projectDefinition.exportFilePrefix ?? `${projectCode}_Expenditure_Atualizado`
+  );
   const safePrefix = rawPrefix.replace(/[^A-Za-z0-9._-]+/g, "_");
   const fileName = `${safePrefix}_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
@@ -4923,12 +5083,12 @@ app.get("/api/health", (req, res) => {
     persistencia: SUPABASE_ENABLED ? "supabase" : "arquivo_local",
     tabelas: SUPABASE_ENABLED
       ? {
-        lancamentos: SUPABASE_LANCAMENTOS_TABLE,
-        topicos: SUPABASE_TOPICOS_TABLE,
-        appConfig: SUPABASE_APP_CONFIG_TABLE,
-        authSessions: SUPABASE_AUTH_SESSIONS_TABLE,
-        auditLog: SUPABASE_AUDIT_LOG_TABLE,
-      }
+          lancamentos: SUPABASE_LANCAMENTOS_TABLE,
+          topicos: SUPABASE_TOPICOS_TABLE,
+          appConfig: SUPABASE_APP_CONFIG_TABLE,
+          authSessions: SUPABASE_AUTH_SESSIONS_TABLE,
+          auditLog: SUPABASE_AUDIT_LOG_TABLE,
+        }
       : null,
     trustProxy: TRUST_PROXY_SETTING,
   });

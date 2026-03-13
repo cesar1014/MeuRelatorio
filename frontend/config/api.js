@@ -3,10 +3,15 @@ function isApiRoute(url) {
 }
 
 export async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      credentials: "same-origin",
+      ...options,
+    });
+  } catch {
+    throw new Error("Nao foi possivel conectar com a API. Reinicie o servidor com npm run dev.");
+  }
 
   if (response.status === 401) {
     window.location.href = "/login";

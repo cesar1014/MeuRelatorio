@@ -55,7 +55,8 @@ export function parseFilters(query) {
   const semestre = query.semestre === "S1" || query.semestre === "S2" ? query.semestre : undefined;
   const dataInicio = isIsoDate(query.dataInicio) ? query.dataInicio : undefined;
   const dataFim = isIsoDate(query.dataFim) ? query.dataFim : undefined;
-  const topicoId = typeof query.topicoId === "string" && query.topicoId.length > 0 ? query.topicoId : undefined;
+  const topicoId =
+    typeof query.topicoId === "string" && query.topicoId.length > 0 ? query.topicoId : undefined;
 
   return {
     ano: Number.isFinite(ano) ? ano : undefined,
@@ -91,11 +92,20 @@ export function montarResumo(topicos, todosLancamentos, filters) {
   const totaisAnterioresPorTopico = new Map();
 
   for (const item of periodoLancamentos) {
-    totaisPeriodoPorTopico.set(item.topicoId, (totaisPeriodoPorTopico.get(item.topicoId) ?? 0) + item.valor);
+    totaisPeriodoPorTopico.set(
+      item.topicoId,
+      (totaisPeriodoPorTopico.get(item.topicoId) ?? 0) + item.valor
+    );
     if (item.semestre === "S1") {
-      totaisPeriodoS1PorTopico.set(item.topicoId, (totaisPeriodoS1PorTopico.get(item.topicoId) ?? 0) + item.valor);
+      totaisPeriodoS1PorTopico.set(
+        item.topicoId,
+        (totaisPeriodoS1PorTopico.get(item.topicoId) ?? 0) + item.valor
+      );
     } else if (item.semestre === "S2") {
-      totaisPeriodoS2PorTopico.set(item.topicoId, (totaisPeriodoS2PorTopico.get(item.topicoId) ?? 0) + item.valor);
+      totaisPeriodoS2PorTopico.set(
+        item.topicoId,
+        (totaisPeriodoS2PorTopico.get(item.topicoId) ?? 0) + item.valor
+      );
     }
   }
 
@@ -119,8 +129,8 @@ export function montarResumo(topicos, todosLancamentos, filters) {
       orcamentoProgramaBRL > 0
         ? round2((despesasAteData / orcamentoProgramaBRL) * 100)
         : despesasAteData > 0
-        ? 999
-        : 0;
+          ? 999
+          : 0;
     const statusExecucao = classificarStatusOrcamento(percentualExecutado);
 
     return {
@@ -154,8 +164,8 @@ export function montarResumo(topicos, todosLancamentos, filters) {
     indicadores.orcamentoProgramaBRL > 0
       ? round2((indicadores.despesasAteData / indicadores.orcamentoProgramaBRL) * 100)
       : indicadores.despesasAteData > 0
-      ? 999
-      : 0;
+        ? 999
+        : 0;
   indicadores.statusExecucao = classificarStatusOrcamento(indicadores.percentualExecutado);
 
   const totalGeral = indicadores.despesasAteData;

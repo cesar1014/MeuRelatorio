@@ -1,3 +1,5 @@
+import { fetchSameOrigin } from "./app/api-client.js";
+
 function getTheme() {
   const saved = localStorage.getItem("theme");
   if (saved === "dark" || saved === "light") return saved;
@@ -5,11 +7,14 @@ function getTheme() {
 }
 
 function applyTheme(theme) {
-  document.body.classList.toggle("theme-dark", theme === "dark");
+  const isDark = theme === "dark";
+  document.body.classList.toggle("theme-dark", isDark);
   document.documentElement.classList.remove("theme-dark-early");
-  const toggleBtn = document.getElementById("login-theme-toggle");
-  if (toggleBtn) {
-    toggleBtn.textContent = theme === "dark" ? "Modo claro" : "Modo escuro";
+  const themeToggle = document.getElementById("login-theme-toggle");
+  if (themeToggle) {
+    themeToggle.checked = isDark;
+    themeToggle.setAttribute("aria-checked", isDark ? "true" : "false");
+    themeToggle.setAttribute("title", isDark ? "Ativar tema claro" : "Ativar tema escuro");
   }
 }
 
@@ -22,8 +27,8 @@ applyTheme(getTheme());
 
 const themeToggle = document.getElementById("login-theme-toggle");
 if (themeToggle) {
-  themeToggle.addEventListener("click", () => {
-    const next = getTheme() === "dark" ? "light" : "dark";
+  themeToggle.addEventListener("change", () => {
+    const next = themeToggle.checked ? "dark" : "light";
     localStorage.setItem("theme", next);
     applyTheme(next);
   });
@@ -37,7 +42,7 @@ const forceLogin = new URLSearchParams(window.location.search).get("force") === 
 async function checkSession() {
   if (forceLogin) return;
   try {
-    const response = await fetch("/api/auth/status", { credentials: "same-origin" });
+    const response = await fetchSameOrigin("/api/auth/status");
     if (!response.ok) return;
     const payload = await response.json();
     if (payload?.authenticated) {
@@ -62,10 +67,9 @@ form.addEventListener("submit", async (event) => {
   };
 
   try {
-    const response = await fetch("/api/auth/login", {
+    const response = await fetchSameOrigin("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
       body: JSON.stringify(requestPayload),
     });
 

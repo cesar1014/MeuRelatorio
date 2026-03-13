@@ -6,7 +6,9 @@ export default function ConfigHeader({
   isEditMode,
   onToggleEditMode,
   onOpenCreateModal,
+  onToggleTheme,
   isDark,
+  themeToggleId = "config-theme-toggle",
 }) {
   const headerTextClass = isDark ? "text-slate-300" : "text-slate-600";
   const titleClass = isDark ? "text-slate-100" : "text-slate-900";
@@ -22,13 +24,13 @@ export default function ConfigHeader({
           Configurações
         </h3>
         <p className={`max-w-4xl text-sm leading-relaxed md:text-[1.02rem] ${headerTextClass}`}>
-          Faça a gestão dos tópicos, orçamentos e permissões de lançamento. O total é recalculado em tempo real
-          conforme o filtro e os campos editados.
+          Faça a gestão dos tópicos, orçamentos e permissões de lançamento. O total é recalculado em
+          tempo real conforme o filtro e os campos editados.
         </p>
       </div>
 
       <div className="flex justify-start md:justify-end">
-        <div className="grid w-full max-w-[470px] grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid w-full max-w-[620px] grid-cols-1 gap-3 sm:grid-cols-3">
           {canManageConfig && isEditMode ? (
             <button
               type="button"
@@ -43,9 +45,11 @@ export default function ConfigHeader({
           )}
 
           <div
-            className={`inline-flex h-14 items-center justify-between rounded-2xl border px-5 shadow-lg backdrop-blur ${controlSurface}`}
+            className={`inline-flex h-14 items-center justify-between gap-3 rounded-2xl border px-5 shadow-lg backdrop-blur ${controlSurface}`}
           >
-            <span className={`text-[1.02rem] font-semibold ${isEditMode ? "text-indigo-400" : headerTextClass}`}>
+            <span
+              className={`text-[1.02rem] font-semibold ${isEditMode ? "text-indigo-400" : headerTextClass}`}
+            >
               Modo Edição
             </span>
             <button
@@ -61,6 +65,46 @@ export default function ConfigHeader({
                 }`}
               />
             </button>
+          </div>
+
+          <div
+            className={`inline-flex h-14 items-center justify-between gap-2 rounded-2xl border px-4 shadow-lg backdrop-blur ${controlSurface}`}
+          >
+            <span className={`text-[0.95rem] font-semibold ${headerTextClass}`}>Tema</span>
+            <div className="menu-theme-toggle config-menu-theme-toggle">
+              <input
+                id={themeToggleId}
+                className="theme-toggle-input"
+                type="checkbox"
+                role="switch"
+                aria-label="Alternar tema claro e escuro"
+                checked={isDark}
+                onChange={onToggleTheme}
+              />
+              <label
+                htmlFor={themeToggleId}
+                className="theme-toggle-label"
+                title="Alternar tema claro e escuro"
+              >
+                <span className="theme-toggle-stars" aria-hidden="true">
+                  <span className="theme-toggle-star theme-toggle-star-1"></span>
+                  <span className="theme-toggle-star theme-toggle-star-2"></span>
+                  <span className="theme-toggle-star theme-toggle-star-3"></span>
+                  <span className="theme-toggle-star theme-toggle-star-4"></span>
+                  <span className="theme-toggle-star theme-toggle-star-5"></span>
+                </span>
+                <span className="theme-toggle-clouds" aria-hidden="true">
+                  <span className="theme-toggle-cloud theme-toggle-cloud-1"></span>
+                  <span className="theme-toggle-cloud theme-toggle-cloud-2"></span>
+                  <span className="theme-toggle-cloud theme-toggle-cloud-3"></span>
+                </span>
+                <span className="theme-toggle-knob" aria-hidden="true">
+                  <span className="theme-toggle-crater theme-toggle-crater-1"></span>
+                  <span className="theme-toggle-crater theme-toggle-crater-2"></span>
+                  <span className="theme-toggle-crater theme-toggle-crater-3"></span>
+                </span>
+              </label>
+            </div>
           </div>
         </div>
       </div>

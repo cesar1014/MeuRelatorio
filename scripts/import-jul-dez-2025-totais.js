@@ -84,7 +84,10 @@ async function ensureBackupDir() {
 async function backupFile(filePath, suffix) {
   if (!fs.existsSync(filePath)) return null;
   const fileName = path.basename(filePath, path.extname(filePath));
-  const backupPath = path.join(BACKUP_DIR, `${fileName}.import-jul-dez-2025.${suffix}${path.extname(filePath)}`);
+  const backupPath = path.join(
+    BACKUP_DIR,
+    `${fileName}.import-jul-dez-2025.${suffix}${path.extname(filePath)}`
+  );
   await fsp.copyFile(filePath, backupPath);
   return backupPath;
 }
@@ -176,7 +179,9 @@ async function replaceSupabaseLancamentos(lancamentos, backupSuffix) {
 
   const afterCount = (insertedRows ?? []).length;
   if (afterCount !== lancamentos.length) {
-    throw new Error(`Contagem divergente no Supabase: esperado ${lancamentos.length}, obtido ${afterCount}`);
+    throw new Error(
+      `Contagem divergente no Supabase: esperado ${lancamentos.length}, obtido ${afterCount}`
+    );
   }
 
   return {
@@ -247,8 +252,12 @@ async function main() {
     .filter((item) => INCLUDE_ZERO_LANCAMENTOS || Number(item.total) > 0)
     .map((item) => makeLancamento(item.topicoId, item.topicoNomeSistema, Number(item.total)));
 
-  const totalCarregado = round2(lancamentos.reduce((sum, item) => sum + Number(item.valor || 0), 0));
-  const expectedTotal = round2(OFFICIAL_TOTALS.reduce((sum, item) => sum + Number(item.total || 0), 0));
+  const totalCarregado = round2(
+    lancamentos.reduce((sum, item) => sum + Number(item.valor || 0), 0)
+  );
+  const expectedTotal = round2(
+    OFFICIAL_TOTALS.reduce((sum, item) => sum + Number(item.total || 0), 0)
+  );
   if (Math.abs(totalCarregado - expectedTotal) >= 0.01) {
     throw new Error(
       `Total carregado divergente: esperado=${expectedTotal.toFixed(2)} atual=${totalCarregado.toFixed(2)}`
@@ -265,7 +274,9 @@ async function main() {
 
   console.log("Importacao oficial Jul-Dez 2025 concluida com sucesso.");
   console.log(`Topicos oficiais validados: ${mapped.length}`);
-  console.log(`Lancamentos gravados (compacto=${INCLUDE_ZERO_LANCAMENTOS ? "nao" : "sim"}): ${lancamentos.length}`);
+  console.log(
+    `Lancamentos gravados (compacto=${INCLUDE_ZERO_LANCAMENTOS ? "nao" : "sim"}): ${lancamentos.length}`
+  );
   console.log(`Total oficial carregado: ${totalCarregado.toFixed(2)}`);
   if (backups.topicos) console.log(`Backup topicos: ${backups.topicos}`);
   if (backups.lancamentos) console.log(`Backup lancamentos: ${backups.lancamentos}`);

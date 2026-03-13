@@ -12,26 +12,25 @@
  * e executar no SQL Editor do Supabase.
  */
 
-import crypto from "node:crypto";
 import { createPbkdf2Credential } from "../auth/passwords.js";
 
 function parseArgs(argv) {
-    const args = {};
-    for (let i = 2; i < argv.length; i++) {
-        if (argv[i] === "--username" && argv[i + 1]) {
-            args.username = argv[++i];
-        } else if (argv[i] === "--password" && argv[i + 1]) {
-            args.password = argv[++i];
-        }
+  const args = {};
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === "--username" && argv[i + 1]) {
+      args.username = argv[++i];
+    } else if (argv[i] === "--password" && argv[i + 1]) {
+      args.password = argv[++i];
     }
-    return args;
+  }
+  return args;
 }
 
 const args = parseArgs(process.argv);
 
 if (!args.username || !args.password) {
-    console.error("Uso: node scripts/make-super-admin.js --username ADMIN --password SenhaForte123");
-    process.exit(1);
+  console.error("Uso: node scripts/make-super-admin.js --username ADMIN --password SenhaForte123");
+  process.exit(1);
 }
 
 const username = args.username.trim();
@@ -44,7 +43,9 @@ console.log(`-- Gerado em: ${now}`);
 console.log(`-- Password hash: ${passwordHash.slice(0, 30)}...\n`);
 
 console.log(`-- INSERT (criar novo super admin):`);
-console.log(`INSERT INTO public.app_users (id, username, password_hash, role, is_active, is_super_admin, created_at, updated_at, last_password_reset_at)`);
+console.log(
+  `INSERT INTO public.app_users (id, username, password_hash, role, is_active, is_super_admin, created_at, updated_at, last_password_reset_at)`
+);
 console.log(`VALUES (`);
 console.log(`  '${userId}',`);
 console.log(`  '${username}',`);
@@ -69,16 +70,22 @@ console.log(`SET is_super_admin = true, role = 'admin', updated_at = '${now}'`);
 console.log(`WHERE lower(btrim(username)) = lower('${username}');`);
 
 console.log(`\n-- Ou alternativamente, adicione ao auth-users.json (modo local):`);
-console.log(JSON.stringify({
-    id: userId,
-    username,
-    passwordHash,
-    role: "admin",
-    isActive: true,
-    isSuperAdmin: true,
-    allowedProjects: ["PEOCON"],
-    rolesByProject: { PEOCON: "admin" },
-    defaultProjectCode: "PEOCON",
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      id: userId,
+      username,
+      passwordHash,
+      role: "admin",
+      isActive: true,
+      isSuperAdmin: true,
+      allowedProjects: ["PEOCON"],
+      rolesByProject: { PEOCON: "admin" },
+      defaultProjectCode: "PEOCON",
+    },
+    null,
+    2
+  )
+);
 
 console.log(`\nPronto! Execute o SQL acima no Supabase SQL Editor.`);

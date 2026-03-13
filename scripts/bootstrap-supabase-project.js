@@ -16,7 +16,8 @@ const SUPABASE_LANCAMENTOS_TABLE = process.env.SUPABASE_LANCAMENTOS_TABLE || "la
 const SUPABASE_APP_CONFIG_TABLE = process.env.SUPABASE_APP_CONFIG_TABLE || "app_config";
 const SUPABASE_AUTH_SESSIONS_TABLE = process.env.SUPABASE_AUTH_SESSIONS_TABLE || "auth_sessions";
 const APP_PROJECT_CODE = normalizeProjectCode(process.env.APP_PROJECT_CODE ?? "PEOCON");
-const APP_PROJECT_NAME = String(process.env.APP_PROJECT_NAME ?? APP_PROJECT_CODE).trim() || APP_PROJECT_CODE;
+const APP_PROJECT_NAME =
+  String(process.env.APP_PROJECT_NAME ?? APP_PROJECT_CODE).trim() || APP_PROJECT_CODE;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sao obrigatorias.");
@@ -107,7 +108,9 @@ function mapTopico(topico) {
     project_code: APP_PROJECT_CODE,
     id: String(topico?.id ?? "").trim(),
     nome: String(topico?.nome ?? "").trim(),
-    grupo: String(topico?.grupo ?? "COMMUNICATIONS & PUBLICATIONS").trim() || "COMMUNICATIONS & PUBLICATIONS",
+    grupo:
+      String(topico?.grupo ?? "COMMUNICATIONS & PUBLICATIONS").trim() ||
+      "COMMUNICATIONS & PUBLICATIONS",
     template_row: Number.isFinite(Number(topico?.templateRow)) ? Number(topico.templateRow) : null,
     incluir_no_resumo: Boolean(topico?.incluirNoResumo),
     permitir_lancamento: Boolean(topico?.permitirLancamento),
@@ -144,7 +147,9 @@ function mapLancamento(item) {
 function mapAuthSession(item) {
   const sessionId = String(item?.sessionId ?? item?.sid ?? "").trim();
   const username = String(item?.username ?? item?.u ?? "").trim();
-  const role = String(item?.role ?? item?.r ?? "admin").trim().toLowerCase();
+  const role = String(item?.role ?? item?.r ?? "admin")
+    .trim()
+    .toLowerCase();
   const expiresAt = Number(item?.expiresAt ?? item?.exp);
   const createdAt = Number(item?.createdAt ?? Date.now());
   if (!sessionId || !username || !Number.isFinite(expiresAt)) return null;
@@ -155,7 +160,9 @@ function mapAuthSession(item) {
     username,
     role: role === "admin" || role === "editor" || role === "viewer" ? role : "admin",
     expires_at: new Date(expiresAt).toISOString(),
-    created_at: Number.isFinite(createdAt) ? new Date(createdAt).toISOString() : new Date().toISOString(),
+    created_at: Number.isFinite(createdAt)
+      ? new Date(createdAt).toISOString()
+      : new Date().toISOString(),
   };
 }
 
@@ -193,7 +200,10 @@ async function main() {
 
   const lancamentos = (Array.isArray(lancamentosRaw) ? lancamentosRaw : [])
     .map(mapLancamento)
-    .filter((item) => item.id && item.topico_id && isIsoDate(item.data) && item.descricao && item.valor > 0);
+    .filter(
+      (item) =>
+        item.id && item.topico_id && isIsoDate(item.data) && item.descricao && item.valor > 0
+    );
 
   const authSessions = (Array.isArray(authSessionsRaw) ? authSessionsRaw : [])
     .map(mapAuthSession)
@@ -205,11 +215,14 @@ async function main() {
     updated_at: new Date().toISOString(),
   };
 
-  const { error: projectError } = await supabase.from(SUPABASE_PROJECTS_TABLE).upsert({
-    code: APP_PROJECT_CODE,
-    name: APP_PROJECT_NAME,
-    is_active: true,
-  }, { onConflict: "code" });
+  const { error: projectError } = await supabase.from(SUPABASE_PROJECTS_TABLE).upsert(
+    {
+      code: APP_PROJECT_CODE,
+      name: APP_PROJECT_NAME,
+      is_active: true,
+    },
+    { onConflict: "code" }
+  );
   if (projectError) throw new Error(`[${SUPABASE_PROJECTS_TABLE}] ${projectError.message}`);
 
   await upsertInChunks(SUPABASE_TOPICOS_TABLE, topicos, "project_code,id", 200);
@@ -224,10 +237,16 @@ async function main() {
     .from(SUPABASE_AUTH_SESSIONS_TABLE)
     .delete()
     .eq("project_code", APP_PROJECT_CODE);
-  if (deleteSessionsError) throw new Error(`[${SUPABASE_AUTH_SESSIONS_TABLE}] ${deleteSessionsError.message}`);
+  if (deleteSessionsError)
+    throw new Error(`[${SUPABASE_AUTH_SESSIONS_TABLE}] ${deleteSessionsError.message}`);
 
   if (authSessions.length > 0) {
-    await upsertInChunks(SUPABASE_AUTH_SESSIONS_TABLE, authSessions, "project_code,session_id", 500);
+    await upsertInChunks(
+      SUPABASE_AUTH_SESSIONS_TABLE,
+      authSessions,
+      "project_code,session_id",
+      500
+    );
   }
 
   console.log(

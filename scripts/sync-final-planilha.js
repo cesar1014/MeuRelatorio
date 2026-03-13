@@ -11,7 +11,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 
-const DEFAULT_WORKBOOK_PATH = "C:\\Users\\User\\Downloads\\Fundacao_Expenditure_Atualizado_2026-02-16 (2).xlsx";
+const DEFAULT_WORKBOOK_PATH =
+  "C:\\Users\\User\\Downloads\\Fundacao_Expenditure_Atualizado_2026-02-16 (2).xlsx";
 const WORKBOOK_PATH = process.argv[2] || DEFAULT_WORKBOOK_PATH;
 const WORKBOOK_SHEET = "Expenditure";
 
@@ -214,11 +215,17 @@ function buildSheetRows(worksheet) {
 
     if (row < TOPIC_START_ROW) continue;
 
-    const orcamento = toNumber(worksheet.getCell(`B${row}`).value ?? worksheet.getCell(`B${row}`).text);
+    const orcamento = toNumber(
+      worksheet.getCell(`B${row}`).value ?? worksheet.getCell(`B${row}`).text
+    );
     if (!Number.isFinite(orcamento)) continue;
 
-    const anterior = toNumber(worksheet.getCell(`C${row}`).value ?? worksheet.getCell(`C${row}`).text);
-    const periodo = toNumber(worksheet.getCell(`D${row}`).value ?? worksheet.getCell(`D${row}`).text);
+    const anterior = toNumber(
+      worksheet.getCell(`C${row}`).value ?? worksheet.getCell(`C${row}`).text
+    );
+    const periodo = toNumber(
+      worksheet.getCell(`D${row}`).value ?? worksheet.getCell(`D${row}`).text
+    );
 
     rows.push({
       row,
@@ -334,7 +341,10 @@ function validateTotals(lancamentos, expectedByTopico) {
   const actualByTopico = new Map();
 
   for (const item of lancamentos) {
-    actualByTopico.set(item.topicoId, round2((actualByTopico.get(item.topicoId) ?? 0) + Number(item.valor || 0)));
+    actualByTopico.set(
+      item.topicoId,
+      round2((actualByTopico.get(item.topicoId) ?? 0) + Number(item.valor || 0))
+    );
   }
 
   const mismatches = [];
@@ -346,7 +356,9 @@ function validateTotals(lancamentos, expectedByTopico) {
   }
 
   if (mismatches.length > 0) {
-    const details = mismatches.map((row) => `${row.topicoId}: esperado ${row.expected}, atual ${row.actual}`).join("; ");
+    const details = mismatches
+      .map((row) => `${row.topicoId}: esperado ${row.expected}, atual ${row.actual}`)
+      .join("; ");
     throw new Error(`Falha na validacao dos totais por topico: ${details}`);
   }
 }

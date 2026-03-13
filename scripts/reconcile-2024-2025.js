@@ -50,7 +50,13 @@ const LEGACY_RATEIO_MAP = new Map([
   ["nurse", ["nurse-1", "nurse-2", "administrative-assistant-1", "administrative-assistant-2"]],
   [
     "audio visual producer",
-    ["nurse-1", "nurse-2", "project-coordinator", "administrative-assistant-1", "administrative-assistant-2"],
+    [
+      "nurse-1",
+      "nurse-2",
+      "project-coordinator",
+      "administrative-assistant-1",
+      "administrative-assistant-2",
+    ],
   ],
   ["prev life", ["just-mine", "external-consultant", "digital-marketing"]],
 ]);
@@ -111,7 +117,10 @@ async function ensureBackupDir() {
 async function backupFile(filePath, suffix) {
   if (!fs.existsSync(filePath)) return null;
   const fileName = path.basename(filePath, path.extname(filePath));
-  const backupPath = path.join(BACKUP_DIR, `${fileName}.reconcile-2024-2025.${suffix}${path.extname(filePath)}`);
+  const backupPath = path.join(
+    BACKUP_DIR,
+    `${fileName}.reconcile-2024-2025.${suffix}${path.extname(filePath)}`
+  );
   await fsp.copyFile(filePath, backupPath);
   return backupPath;
 }
@@ -146,7 +155,8 @@ async function loadSheetTopicValues(filePath, columnKey) {
     if (IGNORE_TOPICS.has(normalized)) continue;
     if (normalized.startsWith("certification")) continue;
 
-    const raw = worksheet.getCell(`${columnKey}${row}`).value ?? worksheet.getCell(`${columnKey}${row}`).text;
+    const raw =
+      worksheet.getCell(`${columnKey}${row}`).value ?? worksheet.getCell(`${columnKey}${row}`).text;
     const value = round2(toNumber(raw));
     if (!Number.isFinite(value) || value <= 0) continue;
 
@@ -268,7 +278,9 @@ function sumValues(rows) {
 }
 
 function validateNoOrphans(lancamentos, topicosById) {
-  const orphans = [...new Set(lancamentos.map((item) => item.topicoId).filter((id) => !topicosById.has(id)))];
+  const orphans = [
+    ...new Set(lancamentos.map((item) => item.topicoId).filter((id) => !topicosById.has(id))),
+  ];
   if (orphans.length > 0) {
     throw new Error(`Lancamentos orfaos encontrados: ${orphans.join(", ")}`);
   }
@@ -335,7 +347,9 @@ async function replaceSupabaseLancamentos(lancamentos, backupSuffix) {
 
   const afterCount = (insertedRows ?? []).length;
   if (afterCount !== lancamentos.length) {
-    throw new Error(`Contagem divergente no Supabase: esperado ${lancamentos.length}, obtido ${afterCount}`);
+    throw new Error(
+      `Contagem divergente no Supabase: esperado ${lancamentos.length}, obtido ${afterCount}`
+    );
   }
 
   return {
@@ -365,7 +379,9 @@ async function main() {
   }
 
   const topicosById = new Map(topicos.map((topico) => [String(topico.id), topico]));
-  const topicoByCanonicalName = new Map(topicos.map((topico) => [normalizeText(topico.nome), String(topico.id)]));
+  const topicoByCanonicalName = new Map(
+    topicos.map((topico) => [normalizeText(topico.nome), String(topico.id)])
+  );
 
   const rows2024D = await loadSheetTopicValues(FILE_2024, "D");
   const rows2025D = await loadSheetTopicValues(FILE_2025, "D");

@@ -19,7 +19,6 @@ export function registerAuthRoutes(app, deps) {
     writeAuditLog,
     removeAuthSessionByRequest,
     clearAuthCookie,
-    isSuperAdminSession: isSuperAdminSessionFn,
     getAuthUserByUsername: getAuthUserByUsernameFn,
     authUsers: getAuthUsersFn,
     setAuthUsers: setAuthUsersFn,
@@ -35,7 +34,12 @@ export function registerAuthRoutes(app, deps) {
   function buildAuthResponse(session, extra = {}) {
     const user = getAuthUserByUsernameFn?.(session?.username);
     const isSuperAdmin = user?.isSuperAdmin === true;
-    const accountType = String(user?.accountType ?? "user").trim().toLowerCase() === "project" ? "project" : "user";
+    const accountType =
+      String(user?.accountType ?? "user")
+        .trim()
+        .toLowerCase() === "project"
+        ? "project"
+        : "user";
     const permissions = getRolePermissions(session?.role, { isSuperAdmin });
     const activeProjectCode = getProjectCodeFromSession(session);
     const requiresProjectSelection = isProjectSelectionRequired(session);
@@ -181,7 +185,8 @@ export function registerAuthRoutes(app, deps) {
     await schedulePersistAuthUsersFn();
 
     const usernameChanged =
-      normalizeLoginIdentifierFn(currentUser.username) !== normalizeLoginIdentifierFn(normalized.username);
+      normalizeLoginIdentifierFn(currentUser.username) !==
+      normalizeLoginIdentifierFn(normalized.username);
     const passwordChanged = password.length > 0;
     const requiresReauth = usernameChanged || passwordChanged;
 
@@ -275,11 +280,18 @@ export function registerAuthRoutes(app, deps) {
 
     req._authSessionCache = updated.session;
     setAuthCookie(req, res, updated.token);
-    await writeAuditLog(req, "auth.active_project.update", "session", updated.session.sessionId, {
-      previousProjectCode: getProjectCodeFromSession(session),
-    }, {
-      activeProjectCode: getProjectCodeFromSession(updated.session),
-    });
+    await writeAuditLog(
+      req,
+      "auth.active_project.update",
+      "session",
+      updated.session.sessionId,
+      {
+        previousProjectCode: getProjectCodeFromSession(session),
+      },
+      {
+        activeProjectCode: getProjectCodeFromSession(updated.session),
+      }
+    );
 
     res.json({
       ok: true,
@@ -292,10 +304,17 @@ export function registerAuthRoutes(app, deps) {
     await removeAuthSessionByRequest(req);
     clearAuthCookie(req, res);
     if (session) {
-      await writeAuditLog(req, "auth.logout", "session", session.sessionId, {
-        username: session.username,
-        role: session.role,
-      }, null);
+      await writeAuditLog(
+        req,
+        "auth.logout",
+        "session",
+        session.sessionId,
+        {
+          username: session.username,
+          role: session.role,
+        },
+        null
+      );
     }
     res.json({ ok: true });
   });

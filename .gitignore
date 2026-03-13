@@ -7,3 +7,15 @@ exports/
 !.env.example
 .vercel/
 tmp-*.xlsx
+.tmp_restore/
+*.zip
+
+# Build artifacts generated locally/CI
+public/react/config-app.js
+public/react/config-app.css
+
+# Runtime/auth data should never be versioned
+data/**
+!data/seeds/
+!data/seeds/**/
+!data/seeds/**/*.json

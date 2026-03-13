@@ -58,10 +58,20 @@ async function cleanupLocal() {
     await fs.mkdir(path.dirname(backupPath), { recursive: true });
     await fs.writeFile(backupPath, JSON.stringify(list, null, 2), "utf8");
     await fs.writeFile(lancamentosFile, JSON.stringify(cleaned, null, 2), "utf8");
-    return { total: list.length, suspicious: suspicious.length, cleaned: cleaned.length, backupPath };
+    return {
+      total: list.length,
+      suspicious: suspicious.length,
+      cleaned: cleaned.length,
+      backupPath,
+    };
   }
 
-  return { total: list.length, suspicious: suspicious.length, cleaned: cleaned.length, backupPath: null };
+  return {
+    total: list.length,
+    suspicious: suspicious.length,
+    cleaned: cleaned.length,
+    backupPath: null,
+  };
 }
 
 async function cleanupSupabase() {

@@ -1,4 +1,6 @@
-﻿const state = {
+﻿import { fetchSameOrigin } from "./app/api-client.js";
+
+const state = {
   topicos: [],
   resumo: { rows: [], totalGeral: 0 },
   detalhes: { items: [], total: 0 },
@@ -24,6 +26,7 @@
   filters: {
     ano: String(new Date().getFullYear()),
     semestre: "",
+    search: "",
   },
   auth: {
     username: "",
@@ -31,6 +34,7 @@
     projectName: "",
     projectBrandName: "",
     activeProjectCode: "",
+    accountType: "user",
     allowedProjects: [],
     requiresProjectSelection: false,
     role: "viewer",
@@ -88,6 +92,20 @@ const TOPIC_LABELS_PT = {
   "Project Coordinator": "Coordenador do Projeto",
   "Administrative Assistant 1": "Assistente Administrativo 1",
   "Administrative Assistant 2": "Assistente Administrativo 2",
+  "Medical resident grant": "Residência médica",
+  "Nursing resident grant": "Residência em enfermagem",
+  "Administrative assistant salary": "Assistente administrativo",
+  "Project coordinator salary": "Coordenador de projeto",
+  "Audiovisual salary": "Audiovisual",
+  "Nurse salary": "Enfermeiro",
+  "Operational fees (PG Lato Sensu/COREME)": "Custos operacionais (PG Lato Sensu/COREME)",
+  "Infrastructure and equipement": "Infraestrutura e equipamentos",
+  "Infrastructure and equipment": "Infraestrutura e equipamentos",
+  "Transportation/operational reserve - External internships":
+    "Transporte/reserva operacional - Estágios externos",
+  "Advertising fees (Marketing/press)": "Publicidade (Marketing/imprensa)",
+  "Scientific and cultural events fee (Harena)": "Eventos científicos e culturais (Harena)",
+  "Resident support fee": "Apoio ao residente",
   Computer: "Computador",
   "Didactic Material": "Material Didático",
   Publications: "Publicações",
@@ -151,6 +169,7 @@ const refs = {
   toolbarFilters: document.getElementById("toolbar-filters"),
   ano: document.getElementById("filter-ano"),
   semestre: document.getElementById("filter-semestre"),
+  filterSearch: document.getElementById("filter-search"),
   applyFilters: document.getElementById("apply-filters"),
   clearFilters: document.getElementById("clear-filters"),
   themeToggle: document.getElementById("theme-toggle"),
@@ -163,6 +182,12 @@ const refs = {
   detalhesTitulo: document.getElementById("detalhes-titulo"),
   detalhesBody: document.getElementById("detalhes-body"),
   detalhesTotal: document.getElementById("detalhes-total"),
+  kpiGrid: document.getElementById("kpi-grid"),
+  kpiOrcamento: document.getElementById("kpi-orcamento"),
+  kpiGasto: document.getElementById("kpi-gasto"),
+  kpiSaldo: document.getElementById("kpi-saldo"),
+  kpiPercentual: document.getElementById("kpi-percentual"),
+  kpiStatus: document.getElementById("kpi-status"),
   topicosGrid: document.getElementById("topicos-grid"),
   topicosCount: document.getElementById("topicos-count"),
   btnNovaCompra: document.getElementById("btn-nova-compra"),
@@ -221,7 +246,6 @@ const configReactRuntime = {
   failureToastShown: false,
 };
 const dialogFocusState = new Map();
-let projectSelectionPromise = null;
 
 function getAuthPermissions() {
   const permissions = state.auth?.permissions ?? {};
@@ -276,9 +300,23 @@ function dateBr(dateIso) {
   return `${dia}/${mes}/${ano}`;
 }
 
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function quickSearchMatches(value, normalizedSearch) {
+  if (!normalizedSearch) return true;
+  return normalizeSearchText(value).includes(normalizedSearch);
+}
+
 function statusFromPercent(percentualExecutado) {
   if (percentualExecutado > 100) return { chave: "alerta", rotulo: "Ultrapassou o orçamento" };
-  if (Math.abs(percentualExecutado - 100) < 0.01) return { chave: "limite", rotulo: "No limite do orçamento" };
+  if (Math.abs(percentualExecutado - 100) < 0.01)
+    return { chave: "limite", rotulo: "No limite do orçamento" };
   if (percentualExecutado >= 90) return { chave: "proximo", rotulo: "Próximo do limite" };
   return { chave: "ok", rotulo: "Dentro do orçamento" };
 }
@@ -310,10 +348,13 @@ function normalizeAllowedProjects(rawProjects, fallbackProjects = []) {
       return { code, name: code, brandName: code };
     }
 
-    const code = String(project?.code ?? project?.projectCode ?? "").trim().toUpperCase();
+    const code = String(project?.code ?? project?.projectCode ?? "")
+      .trim()
+      .toUpperCase();
     if (!code) return null;
     const name = String(project?.name ?? project?.projectName ?? code).trim() || code;
-    const brandName = String(project?.brandName ?? project?.projectBrandName ?? name).trim() || name;
+    const brandName =
+      String(project?.brandName ?? project?.projectBrandName ?? name).trim() || name;
     return { code, name, brandName };
   }
 
@@ -339,7 +380,9 @@ function getCurrentAllowedProjects() {
 function isHubNavigationRequired() {
   const allowedProjects = getCurrentAllowedProjects();
   if (allowedProjects.length <= 1) return false;
-  const activeProjectCode = String(state.auth?.projectCode ?? state.auth?.activeProjectCode ?? "").trim();
+  const activeProjectCode = String(
+    state.auth?.projectCode ?? state.auth?.activeProjectCode ?? ""
+  ).trim();
   return !activeProjectCode;
 }
 
@@ -356,7 +399,9 @@ function redirectToHub(options = {}) {
 }
 
 async function setActiveProject(projectCode, options = {}) {
-  const normalizedProjectCode = String(projectCode ?? "").trim().toUpperCase();
+  const normalizedProjectCode = String(projectCode ?? "")
+    .trim()
+    .toUpperCase();
   if (!normalizedProjectCode) return null;
 
   const status = await request("/api/auth/active-project", {
@@ -371,10 +416,7 @@ async function setActiveProject(projectCode, options = {}) {
 
 async function request(url, options = {}) {
   const { retryOnProjectSelection = true, ...fetchOptions } = options;
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...fetchOptions,
-  });
+  const response = await fetchSameOrigin(url, fetchOptions);
   if (response.status === 401) {
     window.location.href = "/login";
     throw new Error("Sessão expirada. Faça login novamente.");
@@ -395,7 +437,10 @@ async function request(url, options = {}) {
       retryOnProjectSelection &&
       body?.code === "PROJECT_SELECTION_REQUIRED"
     ) {
-      const allowedProjects = normalizeAllowedProjects(body.allowedProjects, getCurrentAllowedProjects());
+      const allowedProjects = normalizeAllowedProjects(
+        body.allowedProjects,
+        getCurrentAllowedProjects()
+      );
       if (allowedProjects.length > 0) {
         state.auth.allowedProjects = allowedProjects;
         syncProjectNavigationUI();
@@ -419,7 +464,7 @@ async function request(url, options = {}) {
       syncProjectNavigationUI();
       if (allowedProjects.length > 1) {
         redirectToHub({ replace: true });
-        return new Promise(() => { });
+        return new Promise(() => {});
       }
     }
 
@@ -442,9 +487,8 @@ async function request(url, options = {}) {
 
 async function logoutAndRedirect() {
   try {
-    await fetch("/api/auth/logout", {
+    await fetchSameOrigin("/api/auth/logout", {
       method: "POST",
-      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
     });
   } catch {
@@ -484,8 +528,11 @@ function syncLoadingUI() {
   if (refs.exportExcel) refs.exportExcel.disabled = busy;
   if (refs.exportCsv) refs.exportCsv.disabled = busy;
   if (refs.exportPdf) refs.exportPdf.disabled = busy;
-  if (refs.resumoBody) refs.resumoBody.setAttribute("aria-busy", state.loading.resumo ? "true" : "false");
-  if (refs.detalhesBody) refs.detalhesBody.setAttribute("aria-busy", state.loading.detalhes ? "true" : "false");
+  if (refs.resumoBody)
+    refs.resumoBody.setAttribute("aria-busy", state.loading.resumo ? "true" : "false");
+  if (refs.detalhesBody)
+    refs.detalhesBody.setAttribute("aria-busy", state.loading.detalhes ? "true" : "false");
+  if (refs.kpiGrid) refs.kpiGrid.setAttribute("aria-busy", state.loading.resumo ? "true" : "false");
 }
 
 function setLoadingState(key, isLoading) {
@@ -504,9 +551,11 @@ function syncNavAriaCurrent(viewName) {
 }
 
 function getFocusableElements(container) {
-  return [...container.querySelectorAll(
-    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-  )].filter((node) => !node.hasAttribute("hidden") && node.getAttribute("aria-hidden") !== "true");
+  return [
+    ...container.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ),
+  ].filter((node) => !node.hasAttribute("hidden") && node.getAttribute("aria-hidden") !== "true");
 }
 
 function openDialog(dialog, preferredFocusSelector = "") {
@@ -599,7 +648,10 @@ function canLaunchTopico(topico) {
   if (typeof topico.permitirLancamentoEfetivo === "boolean") {
     return topico.permitirLancamentoEfetivo;
   }
-  return Boolean(topico.permitirLancamento) || (state.teamHiresUnlocked && isTeamHiresGroup(topico.grupo));
+  return (
+    Boolean(topico.permitirLancamento) ||
+    (state.teamHiresUnlocked && isTeamHiresGroup(topico.grupo))
+  );
 }
 
 function getTopicosAtivos() {
@@ -615,7 +667,9 @@ function foldGroupName(value) {
 }
 
 function normalizeGroupName(groupName) {
-  const text = String(groupName ?? "").trim().replace(/\s+/g, " ");
+  const text = String(groupName ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (!text) return "SEM GRUPO";
   return GROUP_KEY_BY_FOLDED.get(foldGroupName(text)) || text;
 }
@@ -680,18 +734,15 @@ function getGroupedTopicos(options = {}) {
     );
     const despesasAnteriores = Number(resumo?.despesasAnteriores ?? resumo?.totalS1 ?? 0);
     const despesasPeriodo = Number(resumo?.despesasPeriodo ?? resumo?.totalS2 ?? 0);
-    const despesasAteData = Number(
-      resumo?.despesasAteData ?? resumo?.totalAno ?? 0
-    );
+    const despesasAteData = Number(resumo?.despesasAteData ?? resumo?.totalAno ?? 0);
     const saldoRemanescente = Number(
       resumo?.saldoRemanescente ?? round2(orcamentoProgramaBRL - despesasAteData)
     );
     const percentualExecutado = Number(
       resumo?.percentualExecutado ??
-      (orcamentoProgramaBRL > 0 ? round2((despesasAteData / orcamentoProgramaBRL) * 100) : 0)
+        (orcamentoProgramaBRL > 0 ? round2((despesasAteData / orcamentoProgramaBRL) * 100) : 0)
     );
-    const statusExecucao =
-      resumo?.statusExecucao ?? statusFromPercent(percentualExecutado);
+    const statusExecucao = resumo?.statusExecucao ?? statusFromPercent(percentualExecutado);
 
     buckets.get(group).push({
       topicoId: topico.id,
@@ -737,6 +788,7 @@ function syncSemestreAvailability() {
 function syncFilterInputs() {
   refs.ano.value = state.filters.ano;
   refs.semestre.value = state.filters.semestre;
+  if (refs.filterSearch) refs.filterSearch.value = state.filters.search;
   syncSemestreAvailability();
 }
 
@@ -759,6 +811,26 @@ function renderResumoHeader() {
     <th>Despesas Totais</th>
     <th>Saldo Remanescente</th>
   </tr>`;
+}
+
+function renderResumoKpis() {
+  const indicadores = state.resumo?.indicadores ?? {};
+  const orcamento = Number(indicadores.orcamentoProgramaBRL ?? 0);
+  const gasto = Number(indicadores.despesasAteData ?? state.resumo?.totalGeral ?? 0);
+  const saldo = Number(indicadores.saldoRemanescente ?? orcamento - gasto);
+  const percentual = Number(
+    indicadores.percentualExecutado ?? (orcamento > 0 ? (gasto / orcamento) * 100 : 0)
+  );
+  const status = indicadores.statusExecucao ?? statusFromPercent(percentual);
+
+  if (refs.kpiOrcamento) refs.kpiOrcamento.textContent = money(orcamento);
+  if (refs.kpiGasto) refs.kpiGasto.textContent = money(gasto);
+  if (refs.kpiSaldo) refs.kpiSaldo.textContent = money(saldo);
+  if (refs.kpiPercentual) refs.kpiPercentual.textContent = percent(percentual);
+  if (refs.kpiStatus) {
+    refs.kpiStatus.className = `legend-item ${String(status?.chave || "ok").replace(/[^a-z-]/gi, "") || "ok"}`;
+    refs.kpiStatus.textContent = status?.rotulo || "Dentro do orçamento";
+  }
 }
 
 function renderTeamHiresToggle() {
@@ -796,7 +868,11 @@ function applyTheme(theme, options = {}) {
   const persist = options.persist !== false;
   const isDark = theme === "dark";
   document.body.classList.toggle("theme-dark", isDark);
-  refs.themeToggle.textContent = isDark ? "Modo claro" : "Modo escuro";
+  if (refs.themeToggle) {
+    refs.themeToggle.checked = isDark;
+    refs.themeToggle.setAttribute("aria-checked", isDark ? "true" : "false");
+    refs.themeToggle.setAttribute("title", isDark ? "Ativar tema claro" : "Ativar tema escuro");
+  }
   if (persist) {
     window.localStorage.setItem("theme", isDark ? "dark" : "light");
   }
@@ -807,7 +883,7 @@ function setConfigRenderer(useReactConfig) {
     refs.configLegacyShell.hidden = Boolean(useReactConfig);
   }
   if (refs.configReactRoot) {
-    refs.configReactRoot.hidden = !Boolean(useReactConfig);
+    refs.configReactRoot.hidden = !useReactConfig;
   }
 }
 
@@ -828,7 +904,8 @@ function ensureConfigReactStylesheet() {
     link.rel = "stylesheet";
     link.href = CONFIG_REACT_CSS;
     link.onload = () => resolve();
-    link.onerror = () => reject(new Error("Não foi possível carregar os estilos React de configuração."));
+    link.onerror = () =>
+      reject(new Error("Não foi possível carregar os estilos React de configuração."));
     document.head.appendChild(link);
   });
 
@@ -872,11 +949,12 @@ async function ensureConfigReactMounted() {
     } catch (error) {
       configReactRuntime.failed = true;
       if (!configReactRuntime.failureToastShown) {
-        toast("Falha ao carregar a nova tela de configurações. Rode `npm run build:ui` e recarregue a página.");
+        toast(
+          "Falha ao carregar a nova tela de configurações. Rode `npm run build:ui` e recarregue a página."
+        );
         configReactRuntime.failureToastShown = true;
       }
       setConfigRenderer(false);
-      // eslint-disable-next-line no-console
       console.error("[config-react] erro ao montar configurações:", error);
       return false;
     } finally {
@@ -936,20 +1014,37 @@ function applyPermissionUI() {
 
 function syncProjectNavigationUI() {
   const allowedProjects = getCurrentAllowedProjects();
-  const hasMultipleProjects = allowedProjects.length > 1;
+  const isProjectAccount =
+    String(state.auth?.accountType ?? "user")
+      .trim()
+      .toLowerCase() === "project";
   const activeProjectCode = String(state.auth?.projectCode ?? state.auth?.activeProjectCode ?? "").trim();
+  const normalizedActiveProjectCode = activeProjectCode.toUpperCase();
+  const normalizedUsername = String(state.auth?.username ?? "").trim().toUpperCase();
+  const allowedProjectCodeSet = new Set(
+    allowedProjects
+      .map((project) => String(project?.code ?? "").trim().toUpperCase())
+      .filter(Boolean)
+  );
+  const usernameMatchesAnyAllowedProject =
+    normalizedUsername && allowedProjectCodeSet.has(normalizedUsername);
+  const isProjectIdentitySession =
+    isProjectAccount ||
+    Boolean(normalizedActiveProjectCode && normalizedUsername === normalizedActiveProjectCode) ||
+    Boolean(usernameMatchesAnyAllowedProject);
+  const canNavigateHub = allowedProjects.length > 1 && !isProjectIdentitySession;
 
   if (refs.hubLink) {
-    refs.hubLink.hidden = !hasMultipleProjects;
+    refs.hubLink.hidden = !canNavigateHub;
   }
 
   if (refs.projectSwitcherWrap) {
-    refs.projectSwitcherWrap.hidden = !hasMultipleProjects;
+    refs.projectSwitcherWrap.hidden = !canNavigateHub;
   }
 
   if (!refs.projectSwitcher) return;
 
-  if (!hasMultipleProjects) {
+  if (!canNavigateHub) {
     refs.projectSwitcher.innerHTML = "";
     refs.projectSwitcher.disabled = true;
     return;
@@ -975,7 +1070,9 @@ function syncProjectBranding() {
   const projectCode = String(state.auth?.projectCode ?? "").trim();
   const projectName = String(state.auth?.projectBrandName ?? state.auth?.projectName ?? "").trim();
   const displayCode = projectCode || "PROJETO";
-  const displayName = projectName || (state.auth?.requiresProjectSelection ? "Selecione o projeto" : "Não selecionado");
+  const displayName =
+    projectName ||
+    (state.auth?.requiresProjectSelection ? "Selecione o projeto" : "Não selecionado");
 
   if (refs.brandProjectCode) refs.brandProjectCode.textContent = displayCode;
   if (refs.brandProjectName) refs.brandProjectName.textContent = displayName;
@@ -985,6 +1082,12 @@ function syncProjectBranding() {
 function applyAuthStatus(status) {
   const permissions = status?.permissions ?? {};
   const allowedProjects = normalizeAllowedProjects(status?.allowedProjects, []);
+  const accountType =
+    String(status?.accountType ?? "user")
+      .trim()
+      .toLowerCase() === "project"
+      ? "project"
+      : "user";
 
   const activeProjectCode = String(status?.activeProjectCode ?? status?.projectCode ?? "").trim();
   const activeProject = allowedProjects.find((project) => project.code === activeProjectCode);
@@ -992,6 +1095,7 @@ function applyAuthStatus(status) {
     username: String(status?.username ?? ""),
     projectCode: activeProjectCode,
     activeProjectCode,
+    accountType,
     projectName: String(status?.projectName ?? activeProject?.name ?? ""),
     projectBrandName: String(
       status?.projectBrandName ?? activeProject?.brandName ?? activeProject?.name ?? ""
@@ -1039,36 +1143,10 @@ function disableLegacyProjectPicker() {
   }
 }
 
-function setProjectPickerVisible(_visible) {
-  disableLegacyProjectPicker();
-}
-
-function renderProjectPickerOptions(allowedProjects = getCurrentAllowedProjects()) {
-  if (!refs.projectPickerList) return;
-  refs.projectPickerList.innerHTML = "";
-
-  for (const project of allowedProjects) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "project-picker-option";
-    button.dataset.projectCode = project.code;
-    button.innerHTML = `
-      <strong>${escapeHtml(project.code)}</strong>
-      <span>${escapeHtml(project.brandName || project.name || project.code)}</span>
-    `;
-    refs.projectPickerList.appendChild(button);
-  }
-}
-
-async function promptProjectSelection() {
-  redirectToHub({ replace: true });
-  return new Promise(() => { });
-}
-
 async function ensureProjectSelection() {
   if (!isProjectSelectionPending()) return;
   redirectToHub({ replace: true });
-  return new Promise(() => { });
+  return new Promise(() => {});
 }
 
 function syncToolbar(viewName) {
@@ -1153,22 +1231,38 @@ function getInitialViewFromLocation() {
 
 function renderResumo() {
   renderResumoHeader();
+  renderResumoKpis();
   const totalMode = isTotalMode();
   const emptyColspan = totalMode ? 4 : 6;
+  const normalizedSearch = normalizeSearchText(state.filters.search);
 
   if (state.loading.resumo) {
     refs.resumoBody.innerHTML = `<tr><td colspan="${emptyColspan}" class="empty-cell loading-cell"><span class="loading-inline">Carregando resumo...</span></td></tr>`;
     return;
   }
 
-  const groupedTopicos = getGroupedTopicos({ incluirApenasResumo: true });
+  const groupedTopicos = getGroupedTopicos({ incluirApenasResumo: true })
+    .map((group) => ({
+      ...group,
+      items: normalizedSearch
+        ? (group.items ?? []).filter(
+            (item) =>
+              quickSearchMatches(item.nomeExibicao, normalizedSearch) ||
+              quickSearchMatches(item.grupoExibicao, normalizedSearch)
+          )
+        : group.items,
+    }))
+    .filter((group) => Array.isArray(group.items) && group.items.length > 0);
   const totalTopicosResumo = groupedTopicos.reduce(
     (count, group) => count + (Array.isArray(group.items) ? group.items.length : 0),
     0
   );
 
   if (totalTopicosResumo === 0) {
-    refs.resumoBody.innerHTML = `<tr><td colspan="${emptyColspan}" class="empty-cell">Nenhum dado para os filtros atuais.</td></tr>`;
+    const emptyMessage = normalizedSearch
+      ? "Nenhum tópico encontrado para a busca informada."
+      : "Nenhum dado para os filtros atuais.";
+    refs.resumoBody.innerHTML = `<tr><td colspan="${emptyColspan}" class="empty-cell">${emptyMessage}</td></tr>`;
   } else {
     refs.resumoBody.innerHTML = groupedTopicos
       .map(({ groupName, items }) => {
@@ -1179,24 +1273,26 @@ function renderResumo() {
         const totalGroupPeriodo = items.reduce((sum, item) => sum + item.despesasPeriodo, 0);
         const totalGroupAteData = items.reduce((sum, item) => sum + item.despesasAteData, 0);
         const totalGroupSaldo = items.reduce((sum, item) => sum + item.saldoRemanescente, 0);
-        const totalGroupPercentual = totalGroupOrcamento > 0 ? (totalGroupAteData / totalGroupOrcamento) * 100 : 0;
+        const totalGroupPercentual =
+          totalGroupOrcamento > 0 ? (totalGroupAteData / totalGroupOrcamento) * 100 : 0;
         const statusGroup = statusFromPercent(totalGroupPercentual);
         const toneGroup = toneClassFromStatus(statusGroup);
 
         if (totalMode) {
           const rows = expanded
             ? items
-              .map((item) => {
-                const selectedClass = item.topicoId === state.selectedTopicoId ? "clickable selected" : "clickable";
-                const rowClass = `${selectedClass} topic-row`;
-                const safeTopicoId = escapeHtml(item.topicoId);
-                const safeNomeExibicao = escapeHtml(item.nomeExibicao);
-                const blockedLabel = item.permitirLancamento
-                  ? ""
-                  : `<span class="muted-label">Bloqueado</span>`;
-                const toneItem = toneClassFromStatus(item.statusExecucao);
+                .map((item) => {
+                  const selectedClass =
+                    item.topicoId === state.selectedTopicoId ? "clickable selected" : "clickable";
+                  const rowClass = `${selectedClass} topic-row ${item.statusExecucao?.chave === "alerta" ? "over-budget" : ""}`;
+                  const safeTopicoId = escapeHtml(item.topicoId);
+                  const safeNomeExibicao = escapeHtml(item.nomeExibicao);
+                  const blockedLabel = item.permitirLancamento
+                    ? ""
+                    : `<span class="muted-label">Bloqueado</span>`;
+                  const toneItem = toneClassFromStatus(item.statusExecucao);
 
-                return `<tr class="${rowClass}" data-topic-row="${safeTopicoId}">
+                  return `<tr class="${rowClass}" data-topic-row="${safeTopicoId}">
                     <td>
                       <div class="topic-cell">
                         <span>${safeNomeExibicao}</span>
@@ -1209,8 +1305,8 @@ function renderResumo() {
                     </td>
                     <td>${money(item.saldoRemanescente)}</td>
                   </tr>`;
-              })
-              .join("")
+                })
+                .join("")
             : "";
 
           const safeGroupName = escapeHtml(groupName);
@@ -1232,17 +1328,18 @@ function renderResumo() {
 
         const rows = expanded
           ? items
-            .map((item) => {
-              const selectedClass = item.topicoId === state.selectedTopicoId ? "clickable selected" : "clickable";
-              const rowClass = `${selectedClass} topic-row`;
-              const safeTopicoId = escapeHtml(item.topicoId);
-              const safeNomeExibicao = escapeHtml(item.nomeExibicao);
-              const blockedLabel = item.permitirLancamento
-                ? ""
-                : `<span class="muted-label">Bloqueado</span>`;
-              const toneItem = toneClassFromStatus(item.statusExecucao);
+              .map((item) => {
+                const selectedClass =
+                  item.topicoId === state.selectedTopicoId ? "clickable selected" : "clickable";
+                const rowClass = `${selectedClass} topic-row ${item.statusExecucao?.chave === "alerta" ? "over-budget" : ""}`;
+                const safeTopicoId = escapeHtml(item.topicoId);
+                const safeNomeExibicao = escapeHtml(item.nomeExibicao);
+                const blockedLabel = item.permitirLancamento
+                  ? ""
+                  : `<span class="muted-label">Bloqueado</span>`;
+                const toneItem = toneClassFromStatus(item.statusExecucao);
 
-              return `<tr class="${rowClass}" data-topic-row="${safeTopicoId}">
+                return `<tr class="${rowClass}" data-topic-row="${safeTopicoId}">
                   <td>
                     <div class="topic-cell">
                       <span>${safeNomeExibicao}</span>
@@ -1257,8 +1354,8 @@ function renderResumo() {
                   </td>
                   <td>${money(item.saldoRemanescente)}</td>
                 </tr>`;
-            })
-            .join("")
+              })
+              .join("")
           : "";
 
         const safeGroupName = escapeHtml(groupName);
@@ -1288,7 +1385,9 @@ function renderResumo() {
     : 0;
   const saldoHeader = Number.isFinite(saldoIndicadores)
     ? saldoIndicadores
-    : (Number.isFinite(saldoLinhas) ? saldoLinhas : 0);
+    : Number.isFinite(saldoLinhas)
+      ? saldoLinhas
+      : 0;
 
   if (refs.headerBalanceValue) {
     refs.headerBalanceValue.textContent = money(saldoHeader);
@@ -1299,6 +1398,7 @@ function renderDetalhes() {
   const topicoNome = getTopicoNome(state.selectedTopicoId);
   refs.detalhesTitulo.textContent = `Detalhes do Tópico: ${topicoNome}`;
   refs.detalhesTotal.textContent = money(state.detalhes.total || 0);
+  const normalizedSearch = normalizeSearchText(state.filters.search);
 
   if (state.loading.detalhes) {
     refs.detalhesBody.innerHTML =
@@ -1316,7 +1416,26 @@ function renderDetalhes() {
     return;
   }
 
-  refs.detalhesBody.innerHTML = state.detalhes.items
+  const filteredItems = normalizedSearch
+    ? state.detalhes.items.filter(
+        (item) =>
+          quickSearchMatches(item?.descricao, normalizedSearch) ||
+          quickSearchMatches(item?.fornecedor, normalizedSearch) ||
+          quickSearchMatches(item?.responsavel, normalizedSearch)
+      )
+    : state.detalhes.items;
+
+  const filteredTotal = filteredItems.reduce((sum, item) => sum + Number(item?.valor ?? 0), 0);
+  refs.detalhesTotal.textContent = money(
+    normalizedSearch ? filteredTotal : state.detalhes.total || 0
+  );
+
+  if (filteredItems.length === 0) {
+    refs.detalhesBody.innerHTML = `<tr><td colspan="7" class="empty-cell">Nenhum lançamento encontrado para a busca informada.</td></tr>`;
+    return;
+  }
+
+  refs.detalhesBody.innerHTML = filteredItems
     .map((item) => {
       const actionsCell = canWriteLancamentos()
         ? `<div class="row-actions">
@@ -1352,21 +1471,23 @@ function renderTopicosGrid() {
 
       const cards = expanded
         ? items
-          .map((item) => {
-            const statusLabel = item.permitirLancamento ? "Ativo para lançamento" : "Bloqueado (RH)";
-            const buttonClass = item.permitirLancamento ? "primary" : "ghost";
-            const valueClass = `topico-value ${toneClassFromStatus(item.statusExecucao)}`;
-            const safeTopicoId = escapeHtml(item.topicoId);
-            const safeNomeExibicao = escapeHtml(item.nomeExibicao);
-            const safeStatusLabel = escapeHtml(statusLabel);
-            return `<article class="topico-card">
+            .map((item) => {
+              const statusLabel = item.permitirLancamento
+                ? "Ativo para lançamento"
+                : "Bloqueado (RH)";
+              const buttonClass = item.permitirLancamento ? "primary" : "ghost";
+              const valueClass = `topico-value ${toneClassFromStatus(item.statusExecucao)}`;
+              const safeTopicoId = escapeHtml(item.topicoId);
+              const safeNomeExibicao = escapeHtml(item.nomeExibicao);
+              const safeStatusLabel = escapeHtml(statusLabel);
+              return `<article class="topico-card">
                 <h4>${safeNomeExibicao}</h4>
                 <small>${safeStatusLabel}</small>
                 <strong class="${valueClass}">${money(item.despesasAteData)}</strong>
                 <button class="${buttonClass}" data-open-topic="${safeTopicoId}">Ver detalhes</button>
               </article>`;
-          })
-          .join("")
+            })
+            .join("")
         : `<p class="group-collapsed-note">Grupo oculto. Clique para expandir.</p>`;
 
       const safeGroupName = escapeHtml(groupName);
@@ -1422,7 +1543,10 @@ function fillTopicoSelect() {
   }
 
   refs.compraTopico.innerHTML = filtrados
-    .map((topico) => `<option value="${escapeHtml(topico.id)}">${escapeHtml(getTopicLabelPt(topico.nome))}</option>`)
+    .map(
+      (topico) =>
+        `<option value="${escapeHtml(topico.id)}">${escapeHtml(getTopicLabelPt(topico.nome))}</option>`
+    )
     .join("");
 
   if (!filtrados.some((topico) => topico.id === refs.compraTopico.value)) {
@@ -1486,14 +1610,21 @@ async function loadTeamHiresConfig() {
 function fillConfigGroupFilter() {
   if (!refs.configGroupFilter) return;
   const groups = getGroupsFromTopicos();
+  const totalGroups = groups.length;
+  const allLabel =
+    totalGroups > 0 ? `Todos os macro-tópicos (${totalGroups})` : "Todos os macro-tópicos";
   refs.configGroupFilter.innerHTML = [
-    `<option value="${ALL_CONFIG_GROUPS_OPTION}">Todos os 4 macro-tópicos</option>`,
+    `<option value="${ALL_CONFIG_GROUPS_OPTION}">${allLabel}</option>`,
     ...groups.map(
-      (groupName) => `<option value="${escapeHtml(groupName)}">${escapeHtml(getGroupLabelPt(groupName))}</option>`
+      (groupName) =>
+        `<option value="${escapeHtml(groupName)}">${escapeHtml(getGroupLabelPt(groupName))}</option>`
     ),
   ].join("");
 
-  if (!groups.includes(state.configGroupFilter) && state.configGroupFilter !== ALL_CONFIG_GROUPS_OPTION) {
+  if (
+    !groups.includes(state.configGroupFilter) &&
+    state.configGroupFilter !== ALL_CONFIG_GROUPS_OPTION
+  ) {
     state.configGroupFilter = ALL_CONFIG_GROUPS_OPTION;
   }
 
@@ -1504,14 +1635,19 @@ function getConfigTopicosFiltered() {
   if (state.configGroupFilter === ALL_CONFIG_GROUPS_OPTION) {
     return state.topicos;
   }
-  return state.topicos.filter((topico) => getTopicoDisplayGroup(topico) === state.configGroupFilter);
+  return state.topicos.filter(
+    (topico) => getTopicoDisplayGroup(topico) === state.configGroupFilter
+  );
 }
 
 function fillTopicGroupSelect() {
   if (!refs.topicGroup) return;
   const groups = getGroupsFromTopicos();
   refs.topicGroup.innerHTML = groups
-    .map((groupName) => `<option value="${escapeHtml(groupName)}">${escapeHtml(getGroupLabelPt(groupName))}</option>`)
+    .map(
+      (groupName) =>
+        `<option value="${escapeHtml(groupName)}">${escapeHtml(getGroupLabelPt(groupName))}</option>`
+    )
     .join("");
 
   if (!groups.some((groupName) => groupName === refs.topicGroup.value)) {
@@ -1604,20 +1740,23 @@ function renderConfigTopicos() {
         </td>
         <td>${escapeHtml(getGroupLabelPt(getTopicoDisplayGroup(topico)))}</td>
         <td>
-          <input type="number" data-field="orcamentoProgramaBRL" step="0.01" min="0" value="${draft.orcamentoProgramaBRL}" ${state.editMode ? "" : "disabled"
-        } />
+          <input type="number" data-field="orcamentoProgramaBRL" step="0.01" min="0" value="${draft.orcamentoProgramaBRL}" ${
+            state.editMode ? "" : "disabled"
+          } />
         </td>
         <td>
           <label class="inline-check">
-            <input type="checkbox" data-field="incluirNoResumo" ${draft.incluirNoResumo ? "checked" : ""} ${state.editMode ? "" : "disabled"
-        } />
+            <input type="checkbox" data-field="incluirNoResumo" ${draft.incluirNoResumo ? "checked" : ""} ${
+              state.editMode ? "" : "disabled"
+            } />
             Sim
           </label>
         </td>
         <td>
           <label class="inline-check">
-            <input type="checkbox" data-field="permitirLancamento" ${draft.permitirLancamento ? "checked" : ""} ${state.editMode ? "" : "disabled"
-        } />
+            <input type="checkbox" data-field="permitirLancamento" ${draft.permitirLancamento ? "checked" : ""} ${
+              state.editMode ? "" : "disabled"
+            } />
             Sim
           </label>
         </td>
@@ -1667,7 +1806,7 @@ async function deleteConfigTopic(topicId) {
 
   const topicLabel = getTopicLabelPt(topic.nome);
   const confirmed = window.confirm(
-    `Deseja remover o tópico \"${topicLabel}\"? Esta ação não pode ser desfeita.`
+    `Deseja remover o tópico "${topicLabel}"? Esta ação não pode ser desfeita.`
   );
   if (!confirmed) return false;
 
@@ -1771,11 +1910,13 @@ async function refreshEverything() {
 function collectFilters() {
   state.filters.ano = refs.ano.value.trim();
   state.filters.semestre = state.filters.ano ? refs.semestre.value : "";
+  state.filters.search = refs.filterSearch ? refs.filterSearch.value.trim() : "";
 }
 
 function clearFilters() {
   state.filters.ano = "";
   state.filters.semestre = "";
+  state.filters.search = "";
   syncFilterInputs();
 }
 
@@ -1786,9 +1927,7 @@ function resetTopicFormDefaults() {
 
   if (state.configGroupFilter && state.configGroupFilter !== ALL_CONFIG_GROUPS_OPTION) {
     refs.topicGroup.value = state.configGroupFilter;
-  } else if (
-    refs.topicGroup.querySelector('option[value="COMMUNICATIONS & PUBLICATIONS"]')
-  ) {
+  } else if (refs.topicGroup.querySelector('option[value="COMMUNICATIONS & PUBLICATIONS"]')) {
     refs.topicGroup.value = "COMMUNICATIONS & PUBLICATIONS";
   }
 
@@ -1884,7 +2023,10 @@ function openModal() {
   fillCompraGrupoSelect();
   fillTopicoSelect();
 
-  if (state.selectedTopicoId && refs.compraTopico.querySelector(`option[value="${state.selectedTopicoId}"]`)) {
+  if (
+    state.selectedTopicoId &&
+    refs.compraTopico.querySelector(`option[value="${state.selectedTopicoId}"]`)
+  ) {
     refs.compraTopico.value = state.selectedTopicoId;
   }
 
@@ -1908,7 +2050,9 @@ async function openModalForEdit(lancamentoId) {
   refs.submitCompra.textContent = "Salvar alteração";
 
   const selectedTopico = state.topicos.find((topico) => topico.id === item.topicoId);
-  state.selectedCompraGrupo = selectedTopico ? getTopicoDisplayGroup(selectedTopico) : ALL_GROUPS_OPTION;
+  state.selectedCompraGrupo = selectedTopico
+    ? getTopicoDisplayGroup(selectedTopico)
+    : ALL_GROUPS_OPTION;
 
   fillCompraGrupoSelect();
   fillTopicoSelect();
@@ -2030,10 +2174,11 @@ function wireEvents() {
     btn.addEventListener("click", () => setView(btn.dataset.view));
   });
 
-  refs.themeToggle.addEventListener("click", () => {
-    const current = document.body.classList.contains("theme-dark") ? "dark" : "light";
-    applyTheme(current === "dark" ? "light" : "dark");
-  });
+  if (refs.themeToggle) {
+    refs.themeToggle.addEventListener("change", () => {
+      applyTheme(refs.themeToggle.checked ? "dark" : "light");
+    });
+  }
 
   if (refs.logoutButton) {
     refs.logoutButton.addEventListener("click", async () => {
@@ -2051,8 +2196,12 @@ function wireEvents() {
 
   if (refs.projectSwitcher) {
     refs.projectSwitcher.addEventListener("change", async () => {
-      const nextProjectCode = String(refs.projectSwitcher.value ?? "").trim().toUpperCase();
-      const currentProjectCode = String(state.auth?.projectCode ?? "").trim().toUpperCase();
+      const nextProjectCode = String(refs.projectSwitcher.value ?? "")
+        .trim()
+        .toUpperCase();
+      const currentProjectCode = String(state.auth?.projectCode ?? "")
+        .trim()
+        .toUpperCase();
       if (!nextProjectCode || nextProjectCode === currentProjectCode) return;
 
       refs.projectSwitcher.disabled = true;
@@ -2112,7 +2261,11 @@ function wireEvents() {
       await loadTopicos();
       await refreshEverything();
       renderConfigTopicos();
-      toast(state.teamHiresUnlocked ? "Contratações de equipe destravadas." : "Contratações de equipe travadas.");
+      toast(
+        state.teamHiresUnlocked
+          ? "Contratações de equipe destravadas."
+          : "Contratações de equipe travadas."
+      );
     } catch (error) {
       toast(error.message || "Não foi possível alterar o bloqueio.");
     } finally {
@@ -2138,6 +2291,14 @@ function wireEvents() {
       toast(error.message || "Falha ao atualizar filtros.");
     }
   });
+
+  if (refs.filterSearch) {
+    refs.filterSearch.addEventListener("input", () => {
+      state.filters.search = refs.filterSearch.value.trim();
+      renderResumo();
+      renderDetalhes();
+    });
+  }
 
   refs.compraGrupo.addEventListener("change", () => {
     state.selectedCompraGrupo = refs.compraGrupo.value;
@@ -2212,7 +2373,8 @@ function wireEvents() {
 
   refs.applyFilters.addEventListener("click", async () => {
     try {
-      const activeView = document.querySelector(".view.active")?.id?.replace("view-", "") || "resumo";
+      const activeView =
+        document.querySelector(".view.active")?.id?.replace("view-", "") || "resumo";
       if (activeView === "resumo") {
         collectFilters();
         await refreshEverything();
@@ -2335,7 +2497,10 @@ async function boot() {
     }
     await ensureProjectSelection();
     setEditMode(false);
-    const initialView = getInitialViewFromLocation() || document.querySelector(".nav-link.active")?.dataset.view || "resumo";
+    const initialView =
+      getInitialViewFromLocation() ||
+      document.querySelector(".nav-link.active")?.dataset.view ||
+      "resumo";
     setView(initialView);
     await Promise.all([loadFiltros(), loadTeamHiresConfig()]);
     syncFilterInputs();
@@ -2344,10 +2509,8 @@ async function boot() {
     await refreshEverything();
   } catch (error) {
     toast(error.message || "Falha ao carregar dados.");
-    // eslint-disable-next-line no-console
     console.error(error);
   }
 }
 
 boot();
-

@@ -36,7 +36,9 @@ export default function ConfigTopicsTable({
             isDark ? "border-slate-800/60 bg-slate-950/35" : "border-slate-200 bg-slate-50"
           }`}
         >
-          <span className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+          <span
+            className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}
+          >
             Alteracoes pendentes: {pendingTotalCount}
             {pendingVisibleCount !== pendingTotalCount ? ` (${pendingVisibleCount} no filtro)` : ""}
           </span>
@@ -46,7 +48,11 @@ export default function ConfigTopicsTable({
             disabled={isSavingAllTopics || pendingTotalCount === 0}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSavingAllTopics ? "Salvando..." : pendingTotalCount > 0 ? `Salvar tudo (${pendingTotalCount})` : "Salvar tudo"}
+            {isSavingAllTopics
+              ? "Salvando..."
+              : pendingTotalCount > 0
+                ? `Salvar tudo (${pendingTotalCount})`
+                : "Salvar tudo"}
           </button>
         </div>
       ) : null}
@@ -60,7 +66,9 @@ export default function ConfigTopicsTable({
           <thead>
             <tr
               className={`border-b text-left text-xs font-bold uppercase tracking-[0.14em] ${
-                isDark ? "border-slate-800/60 bg-slate-950/55 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-500"
+                isDark
+                  ? "border-slate-800/60 bg-slate-950/55 text-slate-400"
+                  : "border-slate-200 bg-slate-100 text-slate-500"
               }`}
             >
               <th className="whitespace-nowrap px-6 py-5">Tópico</th>

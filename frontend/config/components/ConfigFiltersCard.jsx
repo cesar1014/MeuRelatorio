@@ -56,10 +56,7 @@ export default function ConfigFiltersCard({ filterGroup, groups, onChangeFilter,
           aria-label="Abrir lista de macro-topicos"
           className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center"
         >
-          <ChevronDown
-            size={16}
-            className={isDark ? "text-slate-500" : "text-slate-400"}
-          />
+          <ChevronDown size={16} className={isDark ? "text-slate-500" : "text-slate-400"} />
         </button>
       </div>
     </div>

@@ -36,7 +36,9 @@ function parsePbkdf2Credential(rawCredential) {
     );
   }
 
-  const digest = String(parts[1] ?? "").trim().toLowerCase();
+  const digest = String(parts[1] ?? "")
+    .trim()
+    .toLowerCase();
   if (!SUPPORTED_PBKDF2_DIGESTS.has(digest)) {
     throw new Error("Digest PBKDF2 não suportado. Use sha256, sha384 ou sha512.");
   }

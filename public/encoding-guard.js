@@ -1,7 +1,14 @@
 (function encodingGuardBootstrap() {
   const SUSPECT_CHAR_RE = /[\u00c2\u00c3\u00e2\ufffd]/;
   const BAD_CHAR_RE = /[\u00c2\u00c3\u00e2\ufffd]/g;
-  const MONITORED_ATTRIBUTES = ["title", "placeholder", "aria-label", "aria-description", "alt", "value"];
+  const MONITORED_ATTRIBUTES = [
+    "title",
+    "placeholder",
+    "aria-label",
+    "aria-description",
+    "alt",
+    "value",
+  ];
   const utf8Decoder = new TextDecoder("utf-8");
 
   function scoreBadChars(text) {
@@ -86,8 +93,7 @@
       return;
     }
 
-    const root =
-      node.nodeType === Node.DOCUMENT_NODE ? node.documentElement : node;
+    const root = node.nodeType === Node.DOCUMENT_NODE ? node.documentElement : node;
     if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
 
     normalizeElementAttributes(root);

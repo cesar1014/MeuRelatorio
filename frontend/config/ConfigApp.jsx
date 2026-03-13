@@ -100,12 +100,15 @@ function isTopicDraftDirty(topic, draft) {
   const draftGroup = foldGroupText(draft.grupo);
   const topicBudget = Number(topic.orcamentoProgramaBRL ?? 0);
   const draftBudget = parseBudget(draft.orcamentoProgramaBRL);
-  const budgetChanged = !Number.isFinite(draftBudget) || Math.abs(draftBudget - topicBudget) > 0.000001;
+  const budgetChanged =
+    !Number.isFinite(draftBudget) || Math.abs(draftBudget - topicBudget) > 0.000001;
   const groupChanged = draftGroup !== topicGroup;
   const resumoChanged = Boolean(draft.incluirNoResumo) !== Boolean(topic.incluirNoResumo);
   const lancamentoChanged = Boolean(draft.permitirLancamento) !== Boolean(topic.permitirLancamento);
 
-  return draftNome !== topicNome || groupChanged || budgetChanged || resumoChanged || lancamentoChanged;
+  return (
+    draftNome !== topicNome || groupChanged || budgetChanged || resumoChanged || lancamentoChanged
+  );
 }
 
 function formatCurrency(value) {
@@ -151,6 +154,23 @@ export default function ConfigApp({ onError }) {
   });
 
   const canManageConfig = Boolean(auth?.permissions?.canManageConfig);
+
+  const onToggleTheme = useCallback(() => {
+    const nextIsDark = !document.body.classList.contains("theme-dark");
+    document.body.classList.toggle("theme-dark", nextIsDark);
+    setIsDark(nextIsDark);
+
+    try {
+      localStorage.setItem("theme", nextIsDark ? "dark" : "light");
+    } catch {}
+
+    const legacyToggle = document.getElementById("theme-toggle");
+    if (legacyToggle && "checked" in legacyToggle) {
+      legacyToggle.checked = nextIsDark;
+      legacyToggle.setAttribute("aria-checked", nextIsDark ? "true" : "false");
+      legacyToggle.setAttribute("title", nextIsDark ? "Ativar tema claro" : "Ativar tema escuro");
+    }
+  }, []);
 
   const emitTopicsChanged = useCallback(() => {
     window.dispatchEvent(new CustomEvent("config:topics-changed"));
@@ -244,9 +264,7 @@ export default function ConfigApp({ onError }) {
   }, [topics]);
 
   const groupSuggestions = useMemo(() => {
-    return groups
-      .filter((group) => group.value !== ALL_GROUPS_VALUE)
-      .map((group) => group.label);
+    return groups.filter((group) => group.value !== ALL_GROUPS_VALUE).map((group) => group.label);
   }, [groups]);
 
   const filteredTopics = useMemo(() => {
@@ -290,7 +308,9 @@ export default function ConfigApp({ onError }) {
           [topicId]: {
             ...currentDraft,
             grupo: nextGroup,
-            permitirLancamento: shouldDisableLaunch ? false : Boolean(currentDraft.permitirLancamento),
+            permitirLancamento: shouldDisableLaunch
+              ? false
+              : Boolean(currentDraft.permitirLancamento),
           },
         };
       }
@@ -365,74 +385,86 @@ export default function ConfigApp({ onError }) {
     [canManageConfig, emitTopicsChanged, isEditMode, loadTopics, pushError, saveTopicDraft]
   );
 
-  const onSaveAllTopics = useCallback(
-    async () => {
-      if (!canManageConfig || !isEditMode) return;
-      if (dirtyTopicIds.length === 0) {
-        setNotice("Nenhuma alteracao pendente para salvar.");
-        return;
-      }
+  const onSaveAllTopics = useCallback(async () => {
+    if (!canManageConfig || !isEditMode) return;
+    if (dirtyTopicIds.length === 0) {
+      setNotice("Nenhuma alteracao pendente para salvar.");
+      return;
+    }
 
-      const topicIdsToSave = [...dirtyTopicIds];
-      const failedDraftSnapshot = {};
+    const topicIdsToSave = [...dirtyTopicIds];
+    const failedDraftSnapshot = {};
+    for (const topicId of topicIdsToSave) {
+      if (drafts[topicId]) {
+        failedDraftSnapshot[topicId] = { ...drafts[topicId] };
+      }
+    }
+
+    setIsSavingAll(true);
+    try {
+      const results = [];
       for (const topicId of topicIdsToSave) {
-        if (drafts[topicId]) {
-          failedDraftSnapshot[topicId] = { ...drafts[topicId] };
+        setSavingIds((current) => addSetValue(current, topicId));
+        try {
+          await saveTopicDraft(topicId);
+          results.push({ topicId, ok: true });
+        } catch (saveError) {
+          results.push({
+            topicId,
+            ok: false,
+            message: saveError?.message || "Falha ao salvar topico.",
+          });
+        } finally {
+          setSavingIds((current) => removeSetValue(current, topicId));
         }
       }
 
-      setIsSavingAll(true);
-      try {
-        const results = [];
-        for (const topicId of topicIdsToSave) {
-          setSavingIds((current) => addSetValue(current, topicId));
-          try {
-            await saveTopicDraft(topicId);
-            results.push({ topicId, ok: true });
-          } catch (saveError) {
-            results.push({
-              topicId,
-              ok: false,
-              message: saveError?.message || "Falha ao salvar topico.",
-            });
-          } finally {
-            setSavingIds((current) => removeSetValue(current, topicId));
-          }
-        }
+      const successCount = results.filter((item) => item.ok).length;
+      const failed = results.filter((item) => !item.ok);
 
-        const successCount = results.filter((item) => item.ok).length;
-        const failed = results.filter((item) => !item.ok);
-
-        if (successCount > 0) {
-          await loadTopics();
-          emitTopicsChanged();
-          if (failed.length > 0) {
-            setDrafts((current) => {
-              const merged = { ...current };
-              for (const item of failed) {
-                const snapshot = failedDraftSnapshot[item.topicId];
-                if (snapshot) {
-                  merged[item.topicId] = snapshot;
-                }
+      if (successCount > 0) {
+        await loadTopics();
+        emitTopicsChanged();
+        if (failed.length > 0) {
+          setDrafts((current) => {
+            const merged = { ...current };
+            for (const item of failed) {
+              const snapshot = failedDraftSnapshot[item.topicId];
+              if (snapshot) {
+                merged[item.topicId] = snapshot;
               }
-              return merged;
-            });
-          }
+            }
+            return merged;
+          });
         }
-
-        if (failed.length === 0) {
-          setNotice(successCount === 1 ? "1 topico salvo com sucesso." : `${successCount} topicos salvos com sucesso.`);
-        } else if (successCount === 0) {
-          pushError(failed[0]?.message || "Falha ao salvar topicos.");
-        } else {
-          pushError(`Salvos ${successCount} topico(s); ${failed.length} com erro. Primeiro erro: ${failed[0]?.message || "Falha ao salvar."}`);
-        }
-      } finally {
-        setIsSavingAll(false);
       }
-    },
-    [canManageConfig, dirtyTopicIds, drafts, emitTopicsChanged, isEditMode, loadTopics, pushError, saveTopicDraft]
-  );
+
+      if (failed.length === 0) {
+        setNotice(
+          successCount === 1
+            ? "1 topico salvo com sucesso."
+            : `${successCount} topicos salvos com sucesso.`
+        );
+      } else if (successCount === 0) {
+        pushError(failed[0]?.message || "Falha ao salvar topicos.");
+      } else {
+        pushError(
+          `Salvos ${successCount} topico(s); ${failed.length} com erro. Primeiro erro: ${failed[0]?.message || "Falha ao salvar."}`
+        );
+      }
+    } finally {
+      setIsSavingAll(false);
+    }
+  }, [
+    canManageConfig,
+    dirtyTopicIds,
+    drafts,
+    emitTopicsChanged,
+    isEditMode,
+    loadTopics,
+    pushError,
+    saveTopicDraft,
+  ]);
 
   const onDeleteTopic = useCallback(
     async (topicId) => {
@@ -440,7 +472,9 @@ export default function ConfigApp({ onError }) {
 
       const topic = topics.find((item) => item.id === topicId);
       const topicLabel = topic?.nome || topicId;
-      const confirmed = window.confirm(`Deseja remover o tópico "${topicLabel}"? Esta ação não pode ser desfeita.`);
+      const confirmed = window.confirm(
+        `Deseja remover o tópico "${topicLabel}"? Esta ação não pode ser desfeita.`
+      );
       if (!confirmed) return;
 
       setDeletingIds((current) => addSetValue(current, topicId));
@@ -463,7 +497,10 @@ export default function ConfigApp({ onError }) {
       pushError("Ative o modo edição para acrescentar tópicos.");
       return;
     }
-    const suggestedGroup = filterGroup !== ALL_GROUPS_VALUE ? filterGroup : topics[0]?.grupo || "COMMUNICATIONS & PUBLICATIONS";
+    const suggestedGroup =
+      filterGroup !== ALL_GROUPS_VALUE
+        ? filterGroup
+        : topics[0]?.grupo || "COMMUNICATIONS & PUBLICATIONS";
     setNewTopic({
       nome: "",
       grupo: getGroupLabelPt(suggestedGroup),
@@ -527,7 +564,9 @@ export default function ConfigApp({ onError }) {
           grupo,
           orcamentoProgramaBRL: orcamento,
           incluirNoResumo: Boolean(newTopic.incluirNoResumo),
-          permitirLancamento: isTeamHiresGroup(grupo) ? false : Boolean(newTopic.permitirLancamento),
+          permitirLancamento: isTeamHiresGroup(grupo)
+            ? false
+            : Boolean(newTopic.permitirLancamento),
         });
         setFilterGroup(created?.grupo || grupo);
         setShowCreatePanel(false);
@@ -545,9 +584,13 @@ export default function ConfigApp({ onError }) {
 
   if (loading) {
     return (
-      <div className={`config-react-scope rounded-2xl border p-6 ${
-        isDark ? "border-slate-800/60 bg-slate-900/45 text-slate-300" : "border-slate-200 bg-white text-slate-700"
-      }`}>
+      <div
+        className={`config-react-scope rounded-2xl border p-6 ${
+          isDark
+            ? "border-slate-800/60 bg-slate-900/45 text-slate-300"
+            : "border-slate-200 bg-white text-slate-700"
+        }`}
+      >
         Carregando configurações...
       </div>
     );
@@ -560,13 +603,16 @@ export default function ConfigApp({ onError }) {
         isEditMode={isEditMode}
         onToggleEditMode={() => setIsEditMode((current) => !current)}
         onOpenCreateModal={openCreatePanel}
+        onToggleTheme={onToggleTheme}
         isDark={isDark}
       />
 
       {error ? (
         <div
           className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${
-            isDark ? "border-rose-500/40 bg-rose-500/10 text-rose-200" : "border-rose-300 bg-rose-50 text-rose-700"
+            isDark
+              ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+              : "border-rose-300 bg-rose-50 text-rose-700"
           }`}
         >
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -577,7 +623,9 @@ export default function ConfigApp({ onError }) {
       {notice ? (
         <div
           className={`rounded-xl border px-4 py-3 text-sm ${
-            isDark ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200" : "border-emerald-300 bg-emerald-50 text-emerald-700"
+            isDark
+              ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+              : "border-emerald-300 bg-emerald-50 text-emerald-700"
           }`}
         >
           {notice}
@@ -596,7 +644,9 @@ export default function ConfigApp({ onError }) {
               type="button"
               onClick={closeCreatePanel}
               className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-                isDark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                isDark
+                  ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
               }`}
             >
               <X size={16} />
@@ -642,7 +692,9 @@ export default function ConfigApp({ onError }) {
                 min="0"
                 step="0.01"
                 value={newTopic.orcamentoProgramaBRL}
-                onChange={(event) => onCreateFieldChange("orcamentoProgramaBRL", event.target.value)}
+                onChange={(event) =>
+                  onCreateFieldChange("orcamentoProgramaBRL", event.target.value)
+                }
                 className={`rounded-lg border px-3 py-2 outline-none transition-all ${
                   isDark
                     ? "border-slate-700 bg-slate-950/45 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
@@ -664,7 +716,9 @@ export default function ConfigApp({ onError }) {
                 <input
                   type="checkbox"
                   checked={newTopic.permitirLancamento}
-                  onChange={(event) => onCreateFieldChange("permitirLancamento", event.target.checked)}
+                  onChange={(event) =>
+                    onCreateFieldChange("permitirLancamento", event.target.checked)
+                  }
                   disabled={isTeamHiresGroup(newTopic.grupo)}
                 />
                 Lançamento ativo
@@ -733,7 +787,9 @@ export default function ConfigApp({ onError }) {
 
       <div
         className={`flex flex-col items-center justify-between gap-4 rounded-xl border px-4 py-3 text-xs font-semibold sm:flex-row ${
-          isDark ? "border-slate-800/60 bg-slate-950/35 text-slate-400" : "border-slate-200 bg-slate-50 text-slate-500"
+          isDark
+            ? "border-slate-800/60 bg-slate-950/35 text-slate-400"
+            : "border-slate-200 bg-slate-50 text-slate-500"
         }`}
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-amber-500/90">
@@ -747,4 +803,3 @@ export default function ConfigApp({ onError }) {
     </div>
   );
 }
-

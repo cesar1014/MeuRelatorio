@@ -58,11 +58,13 @@ export default function ConfigTopicRow({
       ? "text-slate-200 border border-slate-700/40 hover:border-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60 bg-slate-950/40"
       : "text-slate-900 border border-slate-300 hover:border-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40 bg-white"
     : isDark
-    ? "text-slate-300 border border-transparent bg-transparent cursor-default"
-    : "text-slate-700 border border-transparent bg-transparent cursor-default";
+      ? "text-slate-300 border border-transparent bg-transparent cursor-default"
+      : "text-slate-700 border border-transparent bg-transparent cursor-default";
 
   return (
-    <tr className={`group/row transition-colors ${isDark ? "hover:bg-slate-800/30" : "hover:bg-slate-100/70"}`}>
+    <tr
+      className={`group/row transition-colors ${isDark ? "hover:bg-slate-800/30" : "hover:bg-slate-100/70"}`}
+    >
       <td className="px-6 py-4">
         <input
           type="text"
@@ -98,14 +100,18 @@ export default function ConfigTopicRow({
 
       <td className="px-6 py-4 text-right">
         <div className="flex items-center justify-end gap-2">
-          <span className={`text-xs font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>R$</span>
+          <span className={`text-xs font-semibold ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+            R$
+          </span>
           <input
             type="number"
             min="0"
             step="0.01"
             value={draft.orcamentoProgramaBRL}
             readOnly={!editable}
-            onChange={(event) => onFieldChange(topic.id, "orcamentoProgramaBRL", event.target.value)}
+            onChange={(event) =>
+              onFieldChange(topic.id, "orcamentoProgramaBRL", event.target.value)
+            }
             className={`w-32 rounded-md px-3 py-1.5 text-right font-mono text-sm outline-none transition-all ${cellInputClass}`}
           />
         </div>

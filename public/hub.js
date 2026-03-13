@@ -1,3 +1,5 @@
+import { fetchSameOrigin } from "./app/api-client.js";
+
 const refs = {
   search: document.getElementById("hub-search"),
   status: document.getElementById("hub-status"),
@@ -48,7 +50,10 @@ function applyTheme(theme, options = {}) {
   }
 
   if (refs.themeToggle) {
-    refs.themeToggle.textContent = nextTheme === "dark" ? "Modo claro" : "Modo escuro";
+    const isDark = nextTheme === "dark";
+    refs.themeToggle.checked = isDark;
+    refs.themeToggle.setAttribute("aria-checked", isDark ? "true" : "false");
+    refs.themeToggle.setAttribute("title", isDark ? "Ativar tema claro" : "Ativar tema escuro");
   }
 }
 
@@ -75,7 +80,9 @@ function toast(message) {
 }
 
 function normalizeProjectStatus(value, fallback = "ativo") {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (normalized === "ativo" || normalized === "inativo" || normalized === "concluido") {
     return normalized;
   }
@@ -83,10 +90,15 @@ function normalizeProjectStatus(value, fallback = "ativo") {
 }
 
 function normalizeProject(project) {
-  const code = String(project?.code ?? project ?? "").trim().toUpperCase();
+  const code = String(project?.code ?? project ?? "")
+    .trim()
+    .toUpperCase();
   const name = String(project?.name ?? code).trim() || code;
   const department = String(project?.departmentName ?? project?.department ?? "").trim();
-  const status = normalizeProjectStatus(project?.status, project?.isActive === false ? "inativo" : "ativo");
+  const status = normalizeProjectStatus(
+    project?.status,
+    project?.isActive === false ? "inativo" : "ativo"
+  );
 
   return {
     code,
@@ -105,7 +117,9 @@ function projectSort(a, b) {
 }
 
 function formatDisplayName(username) {
-  const clean = String(username ?? "").replace(/\s+/g, " ").trim();
+  const clean = String(username ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!clean) return "";
   const parts = clean.split(" ").slice(0, 2);
   return parts
@@ -114,10 +128,7 @@ function formatDisplayName(username) {
 }
 
 async function apiFetch(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-  });
+  const response = await fetchSameOrigin(url, options);
 
   if (response.status === 401) {
     window.location.replace("/login");
@@ -149,9 +160,8 @@ async function setActiveProject(projectCode) {
 
 async function logoutAndRedirect() {
   try {
-    await fetch("/api/auth/logout", {
+    await fetchSameOrigin("/api/auth/logout", {
       method: "POST",
-      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
     });
   } catch {
@@ -174,7 +184,9 @@ function getDepartments() {
 
 function getFilteredProjects() {
   const normalizedSearch = state.searchTerm.toLowerCase();
-  const selectedDept = String(state.selectedDepartment ?? "").trim().toLowerCase();
+  const selectedDept = String(state.selectedDepartment ?? "")
+    .trim()
+    .toLowerCase();
 
   return state.projects
     .filter((project) => {
@@ -186,7 +198,9 @@ function getFilteredProjects() {
       }
 
       if (selectedDept) {
-        const projectDept = String(project.department ?? "").trim().toLowerCase();
+        const projectDept = String(project.department ?? "")
+          .trim()
+          .toLowerCase();
         if (projectDept !== selectedDept) return false;
       }
 
@@ -231,8 +245,11 @@ function renderDepartmentOptions() {
 
   const options = ['<option value="">Departamentos</option>'];
   for (const department of departments) {
-    const selected = department.toLowerCase() === state.selectedDepartment.toLowerCase() ? " selected" : "";
-    options.push(`<option value="${escapeHtml(department)}"${selected}>${escapeHtml(department)}</option>`);
+    const selected =
+      department.toLowerCase() === state.selectedDepartment.toLowerCase() ? " selected" : "";
+    options.push(
+      `<option value="${escapeHtml(department)}"${selected}>${escapeHtml(department)}</option>`
+    );
   }
   refs.department.innerHTML = options.join("");
 }
@@ -253,27 +270,32 @@ function renderProjects() {
   if (filteredProjects.length === 0) {
     refs.grid.innerHTML = "";
     if (refs.empty) {
-      const visibleCatalogCount = state.projects.filter((project) => project.status !== "concluido").length;
+      const visibleCatalogCount = state.projects.filter(
+        (project) => project.status !== "concluido"
+      ).length;
       refs.empty.hidden = false;
-      refs.empty.textContent = visibleCatalogCount === 0
-        ? "Nenhum projeto disponivel para este login."
-        : "Nenhum projeto encontrado para os filtros atuais.";
+      refs.empty.textContent =
+        visibleCatalogCount === 0
+          ? "Nenhum projeto disponivel para este login."
+          : "Nenhum projeto encontrado para os filtros atuais.";
     }
     return;
   }
 
   if (refs.empty) refs.empty.hidden = true;
 
-  refs.grid.innerHTML = filteredProjects.map((project) => {
-    const opening = state.openingProjectCode === project.code;
-    const openButtonLabel = opening ? "Abrindo..." : "Acessar projeto";
-    const cardClasses = ["hub-card"];
-    if (project.code === state.auth.activeProjectCode) cardClasses.push("hub-card-current");
+  refs.grid.innerHTML = filteredProjects
+    .map((project) => {
+      const opening = state.openingProjectCode === project.code;
+      const openButtonLabel = opening ? "Abrindo..." : "Acessar projeto";
+      const cardClasses = ["hub-card"];
+      if (project.code === state.auth.activeProjectCode) cardClasses.push("hub-card-current");
 
-    const statusLabel = project.status === "ativo" ? "Ativo" : "Inativo";
-    const statusClass = project.status === "ativo" ? "hub-pill hub-pill-active" : "hub-pill hub-pill-inactive";
+      const statusLabel = project.status === "ativo" ? "Ativo" : "Inativo";
+      const statusClass =
+        project.status === "ativo" ? "hub-pill hub-pill-active" : "hub-pill hub-pill-inactive";
 
-    return `
+      return `
       <article class="${cardClasses.join(" ")}" data-project-card="${escapeHtml(project.code)}">
         <div class="hub-card-content">
           <strong class="hub-card-code">${escapeHtml(project.code)}</strong>
@@ -285,7 +307,8 @@ function renderProjects() {
         </div>
       </article>
     `;
-  }).join("");
+    })
+    .join("");
 }
 
 async function openProject(projectCode) {
@@ -304,9 +327,8 @@ async function openProject(projectCode) {
 
 function wireEvents() {
   if (refs.themeToggle) {
-    refs.themeToggle.addEventListener("click", () => {
-      const current = document.body.classList.contains("theme-dark") ? "dark" : "light";
-      applyTheme(current === "dark" ? "light" : "dark");
+    refs.themeToggle.addEventListener("change", () => {
+      applyTheme(refs.themeToggle.checked ? "dark" : "light");
     });
   }
 
@@ -336,7 +358,9 @@ function wireEvents() {
     refs.statusTabs.addEventListener("click", (event) => {
       const tab = event.target.closest("button[data-status]");
       if (!tab) return;
-      const nextStatus = String(tab.dataset.status ?? "todos").trim().toLowerCase();
+      const nextStatus = String(tab.dataset.status ?? "todos")
+        .trim()
+        .toLowerCase();
       if (!STATUS_TABS.some((item) => item.key === nextStatus)) return;
       state.selectedStatus = nextStatus;
       renderStatusTabs();
@@ -360,7 +384,9 @@ function wireEvents() {
     refs.grid.addEventListener("click", async (event) => {
       const openButton = event.target.closest("button[data-open-project]");
       if (!openButton) return;
-      const projectCode = String(openButton.dataset.openProject ?? "").trim().toUpperCase();
+      const projectCode = String(openButton.dataset.openProject ?? "")
+        .trim()
+        .toUpperCase();
       await openProject(projectCode);
     });
   }
@@ -382,7 +408,9 @@ async function loadHubData() {
   state.auth = {
     username: String(status?.username ?? ""),
     isSuperAdmin: status?.isSuperAdmin === true,
-    activeProjectCode: String(status?.activeProjectCode ?? status?.projectCode ?? "").trim().toUpperCase(),
+    activeProjectCode: String(status?.activeProjectCode ?? status?.projectCode ?? "")
+      .trim()
+      .toUpperCase(),
   };
 
   if (refs.reportLink) {
